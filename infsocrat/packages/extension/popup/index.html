@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>InfSocrat</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        width: 420px;
+        max-height: 560px;
+        overflow-y: auto;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        margin: 0;
+        padding: 12px;
+        background: Canvas;
+        color: CanvasText;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 13px;
+        margin: 16px 0 6px;
+        border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+        padding-top: 10px;
+      }
+      #status {
+        font-size: 11px;
+        color: color-mix(in srgb, CanvasText 55%, transparent);
+        margin-bottom: 10px;
+      }
+      #tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 10px;
+      }
+      #tabs button {
+        flex: 1;
+        padding: 6px 4px;
+        font-size: 12px;
+      }
+      #tabs button[aria-selected="true"] {
+        font-weight: 600;
+        outline: 2px solid color-mix(in srgb, CanvasText 30%, transparent);
+      }
+      select,
+      textarea,
+      input,
+      button {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      select,
+      input {
+        margin-bottom: 8px;
+        padding: 4px;
+      }
+      textarea {
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12px;
+        height: 110px;
+        padding: 6px;
+        margin-bottom: 8px;
+        resize: vertical;
+      }
+      button {
+        padding: 6px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      #prompt,
+      #concept,
+      #challenge-prompt,
+      #open-prompt {
+        margin: 4px 0;
+      }
+      #concept {
+        font-size: 11px;
+        color: color-mix(in srgb, CanvasText 55%, transparent);
+      }
+      .pass {
+        color: #1a7f37;
+      }
+      .fail {
+        color: #cf222e;
+      }
+      .low-confidence {
+        color: #9a6700;
+      }
+      #hint,
+      #open-hint {
+        margin-top: 8px;
+        padding: 8px;
+        background: color-mix(in srgb, CanvasText 6%, transparent);
+        border-radius: 6px;
+      }
+      #hint .meta,
+      #open-hint .meta {
+        font-size: 11px;
+        color: color-mix(in srgb, CanvasText 55%, transparent);
+        margin-bottom: 4px;
+      }
+      #challenge-section[hidden],
+      #practice-view[hidden],
+      #upload-view[hidden],
+      #walkthrough-view[hidden],
+      #open-answer-view[hidden] {
+        display: none;
+      }
+      #extracted-list button {
+        text-align: left;
+        margin-bottom: 4px;
+        font-size: 12px;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: color-mix(in srgb, CanvasText 12%, transparent);
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>InfSocrat</h1>
+    <div id="status">Loading…</div>
+
+    <div id="tabs" role="tablist">
+      <button id="tab-practice" aria-selected="true">Practice</button>
+      <button id="tab-upload" aria-selected="false">Upload</button>
+      <button id="tab-walkthrough" aria-selected="false">Walk through code</button>
+    </div>
+
+    <div id="practice-view">
+      <select id="exercise-select"></select>
+      <p id="prompt"></p>
+      <p id="concept"></p>
+
+      <textarea id="code" spellcheck="false"></textarea>
+      <button id="run-button">Run</button>
+
+      <div id="results"></div>
+      <div id="hint"></div>
+
+      <div id="challenge-section" hidden>
+        <h2>Independence Challenge</h2>
+        <select id="variation-select"></select>
+        <p id="challenge-prompt"></p>
+        <textarea id="challenge-code" spellcheck="false"></textarea>
+        <button id="challenge-run-button">Run</button>
+        <div id="challenge-results"></div>
+      </div>
+    </div>
+
+    <div id="upload-view" hidden>
+      <p class="note" style="font-size: 11px">
+        Upload a past paper or exercise sheet (PDF or image). InfSocrat extracts the questions — grading for
+        anything without its own tests is done by ELM and may be wrong; low-confidence results are flagged.
+      </p>
+      <input id="upload-file" type="file" accept=".pdf,image/*" />
+      <button id="analyze-button">Analyze</button>
+      <div id="upload-status"></div>
+      <div id="extracted-list"></div>
+
+      <div id="open-answer-view" hidden>
+        <h2>Question</h2>
+        <p id="open-prompt"></p>
+        <textarea id="open-answer" placeholder="Your answer / code…" spellcheck="false"></textarea>
+        <button id="open-check-button">Check answer</button>
+        <div id="open-result"></div>
+        <div id="open-hint"></div>
+      </div>
+    </div>
+
+    <div id="walkthrough-view" hidden>
+      <p class="note" style="font-size: 11px">Paste code you already have. Predict what it returns before you see the real result.</p>
+      <textarea id="wt-code" placeholder="def my_function(x):&#10;    ..." spellcheck="false"></textarea>
+      <input id="wt-function-name" type="text" placeholder="Function name, e.g. my_function" />
+      <input id="wt-args" type="text" placeholder="Arguments as JSON, e.g. [1, 2, 3]" />
+      <button id="wt-ask-button">What will this return?</button>
+      <div id="wt-predict-section" hidden>
+        <textarea id="wt-prediction" placeholder="Your prediction…"></textarea>
+        <button id="wt-reveal-button">Reveal</button>
+      </div>
+      <div id="wt-result"></div>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
