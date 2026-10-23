@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "types": ["chrome", "node"]
-  },
-  "include": ["popup", "options", "scripts", "src"]
-}

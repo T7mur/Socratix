@@ -1,0 +1,84 @@
+# Socratix — root .gitignore
+
+# Secrets and local environment files (keep templates)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python / FastAPI / grading worker
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Node.js / Next.js
+node_modules/
+.next/
+.nuxt/
+out/
+.vercel/
+.turbo/
+.npm/
+.pnpm-store/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs and runtime output
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+
+# Local data / grading scratch files
+/tmp/
+/backend/tmp/
+/grading-worker/tmp/
+/grading-worker/workspaces/
+/grading-worker/submissions/
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE / operating system
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Test reports and coverage
+coverage/
+playwright-report/
+test-results/
+
+# Keep project documents and reproducible dependency locks tracked
+# README.md, AGENTS.md, docs/, package-lock.json, pnpm-lock.yaml,
+# yarn.lock, uv.lock, poetry.lock, and migrations are NOT ignored.

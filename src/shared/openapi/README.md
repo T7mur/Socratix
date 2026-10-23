@@ -1,0 +1,5 @@
+# OpenAPI snapshots — Member F
+
+Reserved for schema snapshots generated from the implemented FastAPI application. No snapshot has been generated yet.
+
+Public contract changes require affected-owner review, updated backend contract tests, regenerated snapshots and regenerated frontend types in the same PR. Do not hand-author a snapshot to imply routes already exist.
