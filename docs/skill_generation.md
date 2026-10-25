@@ -36,6 +36,150 @@ CS2023 has knowledge areas, knowledge units, topics and learning outcomes. Start
 7. **Validate** referential integrity, duplicate score, acyclic `requires` and `part_of`, source provenance and rights.
 8. **Human approval**: approve/edit/reject candidates and edges; preserve audit record and immutable graph version. Publish approved graph to consumers.
 
+### Offline PDF ingestion — implemented, design Proposed
+
+The local CS2023 parser is an alternative to prepared excerpts. It prepares evidence only;
+it does not call ELM, invent skills, write the database, approve curricula or register an API.
+The source document must be explicitly permitted before any extracted text is exported.
+`pending` (the default) and `restricted` export only metadata, counts, locations and diagnostics.
+This does not infer permission from the PDF being available in the repository.
+
+Run from `src/backend` (Python 3.10+):
+
+```powershell
+python -m pip install -r app/modules/skill_generation/requirements.txt
+python -m app.modules.skill_generation.cli ../../data/3664191.pdf --source-id 11111111-1111-4111-8111-111111111111 --uri https://csed.acm.org/ --edition CS2023-January-2024 --rights-status pending --output ../../tmp/cs2023-review
+```
+
+Only the PDF path is required. Without overrides, the CLI derives a stable UUID from the file's
+SHA-256 checksum, uses `urn:sha256:<checksum>` as its locator, records edition as null, and chooses
+a fresh directory under the current working directory's `outputs/`. The same bytes retain the same
+source identity even after moving or renaming the file. Changed bytes produce a different default ID.
+Explicit `--source-id`, `--uri`, `--edition` and `--output` values override these defaults. Supply
+the registered source UUID, official URI and actual edition when integrating with the catalogue.
+Set `--rights-status permitted` only
+when the operator has recorded appropriate permission. Choose a **new output directory** per run;
+existing directories are refused to prevent stale request files surviving a restricted re-export.
+Outputs are staged and renamed together after extraction/validation succeeds. Exit codes:
+`0` ready, `2` artifacts written but review required, `1` input/extraction/export failure.
+`--section AI-ML` selects a unit; repeat the option for multiple units. Without selection,
+all reconstructed knowledge units in the Body of Knowledge are eligible.
+
+**Extraction:** `parser.extract_pdf` retains page dimensions, printed labels, native words,
+font/size data and word coordinates. PDF words are grouped into lines before a second pass
+reconstructs units and paragraphs. Headings use CS2023 identifiers, labels and typography.
+Ruled tables retain rows as text separated by ` | ` and original coordinates; borderless
+tables/multiple columns are not assumed safe. Large gaps flag ambiguous reading order.
+Repeated margin text, page numbers and dotted contents entries are kept but excluded.
+Figures without an extractable text representation require review. This conservative profile
+is not a universal document-layout or mathematical-formula recognizer.
+
+**OCR:** Install Tesseract 5 and its English language data locally; ensure `tesseract --version`
+and `tesseract --list-langs` work, or supply `--tesseract <executable>` and `--ocr-language eng`.
+On Windows use an installation listed by the [Tesseract project](https://tesseract-ocr.github.io/tessdoc/Installation.html);
+on Debian/Ubuntu install `tesseract-ocr` and `tesseract-ocr-eng` through the system package manager.
+The CLI uses pdfplumber's PDFium renderer at 300 DPI and invokes a fixed Tesseract argument list
+without a shell, reading TSV word boxes/confidences. Coordinates map back to PDF points with
+top-left origin. Temporary images are deleted after each invocation. No OCR cloud service is used.
+Native text is retained alongside replacement OCR text; native pages are not routinely rasterized.
+Embedded figures on otherwise readable pages are flagged rather than automatically mixed into prose.
+
+Defaults are configurable CLI options: 100 MB input, 1,000 pages, 25 million rendered pixels/page,
+120-second OCR timeout, English OCR, mean OCR confidence at least 80/100, minimum 30 native
+alphanumeric characters, maximum 1% replacement characters. A nearly empty page containing an
+image or a damaged text layer triggers OCR. Blank pages do not. Sparse native text is flagged.
+These thresholds are engineering heuristics, not calibrated correctness probabilities.
+Unavailable/failed/timed-out OCR, low confidence and ambiguous layouts block affected units.
+Password-protected and corrupt inputs fail explicitly. The CLI runs offline as a trusted operator
+tool; do not import its subprocess path into the public FastAPI process.
+
+**Hierarchy:** retain KA/KU source codes separately from canonical skill IDs. Preserve nested
+list indentation, cross-page continuations and CS Core/KA Core/Non-core classes. Explicit source
+outcomes belong to the whole KU unless the source is corrected to identify a narrower mapping.
+Ancillary sections such as committee membership, preambles and references are not topic targets.
+Cross-references are evidence strings, never generated `requires` edges. Unknown parents are
+review issues rather than inferred curriculum relationships.
+
+**Artifacts:**
+
+| File | Meaning |
+|---|---|
+| `document.json` | Source/checksum, parser/tool versions, settings, diagnostics; permitted sources also retain raw pages/words and raw line blocks |
+| `blocks.jsonl` | Reconstructed blocks, source fragments, semantic roles, hierarchy, confidence warnings |
+| `sections.json` | KA/KU hierarchy and topic/outcome membership; metadata/counts only without permission |
+| `requests/<chunk UUID>.json` | Complete system-prompt plus untrusted `user_data` envelope, source spans and primary/context references |
+| `manifest.json` | Selection/exclusions, per-unit readiness/reasons, exact primary coverage ranges, repeated context and encoded request sizes |
+
+Internal dataclasses live in `ingestion_models.py` and do not replace public contracts.
+Each source span exposes the documented `source_id`, `section`, `page`, `text_excerpt`,
+`rights_status` plus an internal span ID and locator containing block ID, normalized-text range,
+URI and page boxes. Physical pages are one-based. UUIDs depend on source checksum, parser version
+and location, so repeated text at distinct locations stays distinct. Retain the same metadata,
+settings and corrections for reproducible artifacts. A parser version change invalidates corrections.
+
+**Payloads:** prefer one unit/request, then top-level list subtrees. Repeat unit/area headings,
+parent list items and unit outcomes as explicitly marked context when splitting topics. Degrade
+oversized subtrees to blocks, then split blocks only at sentence/paragraph boundaries; ranges and
+continuation links account for every character exactly once as primary evidence. Each complete
+serialized envelope is at most `--max-payload-bytes` (24,000 UTF-8 bytes by default), including
+the system prompt and supplied `--existing-skills <JSON array>`. This is not a token budget.
+Unsplit sentences, required context or supplied skills that cannot fit block the entire unit with
+`unsplittable_block_exceeds_payload_limit`; no partial unit is silently exported. The future gateway
+must add model-specific context/output budgeting and the accepted candidate response schema.
+
+The versioned prompt is `src/shared/prompts/skill/prepare_input_v1.txt`. Source content is always
+data, including apparent instructions or links. No links are fetched. The exporter neither sends
+requests nor claims prompt instructions alone prevent model-side prompt injection. Candidate
+validation and human review remain mandatory in the later generation phase.
+
+**Corrections:** `--corrections <JSON>` replays a reviewed patch against an immutable raw extraction:
+
+```json
+{
+  "version": 1,
+  "source_checksum": "<SHA-256 from document.json>",
+  "parser_version": "cs2023-pdf-v1",
+  "blocks": {
+    "<raw block UUID>": {"semantic_role": "knowledge_unit", "layout_type": "heading", "text": "AI-Demo: Corrected title", "warnings": []}
+  },
+  "sections": {
+    "<unit UUID>": {"parent_id": "<area UUID>", "block_ids": ["<reconstructed block UUID>"], "warnings": []}
+  }
+}
+```
+
+An optional `order` lists **every raw block UUID exactly once**. Block corrections may set text,
+layout type, semantic role, exclusion, parent ID and warnings. Section patches may reparent units,
+assign blocks and clear reviewed warnings. Raw text/boxes remain available; corrected derivations
+and their digest are separate. Clear warnings only after inspecting the source. Invalid references,
+cycles, duplicate/missing order entries and mismatched source/parser versions are rejected.
+
+**Validation:** install `requirements-dev.txt` and run from `src/backend`:
+
+```powershell
+python -m pytest tests/unit/skill_generation tests/contract/skill_generation tests/integration/skill_generation -q
+python -m ruff check app/modules/skill_generation tests/unit/skill_generation tests/contract/skill_generation tests/integration/skill_generation
+```
+
+Fixtures use synthetic source records/PDFs only. Tests cover native/mixed pages, OCR TSV mapping
+and error boundaries, encryption/corruption/resource limits, tables/ambiguous columns, unit outcomes,
+cross-page lists, stable IDs/exports, corrections, rights redaction, evidence resolution, payload
+splitting and source instructions remaining in user data. Real Tesseract is an optional operator
+smoke test; executable-boundary fixtures do not establish OCR accuracy on real scans.
+
+Verification on 2026-10-25: **41 passed, 1 skipped** (real Tesseract unavailable), Ruff and
+`git diff --check` passed. A full read-only extraction of the repository PDF
+(`SHA-256 da20f30d35e7c28a068a34c696fe8a92f25b71af3da5cc79677b3b487f014ca4`)
+processed 459 pages in approximately 57 seconds: 17 knowledge areas, 166 unique knowledge
+units, 12,816 raw line/table/figure blocks and 8,724 reconstructed blocks. Verified multi-page
+AI-ML outcome membership, MSF-Calculus, all five SPD-SEP units and core-classified SF outcomes.
+Representative pages 71, 74, 192 and 309 were rendered; pages 74, 192 and 309 were visually
+checked against the structural rules. Two units have reading-order warnings; diagnostics also
+retain figures, sparse separator pages and unavailable OCR on the final page. Source rights
+remain pending: **zero real-source text requests were exported**, and all units are review-required.
+Text-bearing exports and coverage were verified using synthetic permitted fixtures. No ELM,
+database, source permission or academic review is claimed by this verification.
+
 ### Concrete example
 
 Input source topic 'Conditional Constructs' plus permitted examples → proposed `python.conditionals`, `python.branch_order`, `python.boundary_conditions`; outcome `python.conditionals.transfer.v1`: *Given new numerical thresholds, implement and explain correct branch selection on exact boundaries*. `part_of` links skills to topic; `requires` for `python.conditionals -> python.comparisons` is **proposed**, not assumed proven by CS2023 hierarchy.

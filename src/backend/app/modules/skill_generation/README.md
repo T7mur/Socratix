@@ -5,6 +5,12 @@
 Turn permitted source spans into proposals, deterministic graph validation and auditable human approval. Consumers receive `ApprovedSkillGraph` with approved skills, outcomes and relationships only.
 
 Files from the specification (reviewer, repository and relation validator implemented; extraction remains planned):
+Implemented offline ingestion: `python -m app.modules.skill_generation.cli --help` from `src/backend`.
+Install `requirements.txt` in this directory; tests additionally use `requirements-dev.txt`.
+See the specification's **Offline PDF ingestion** section for OCR setup, rights-gated exports,
+corrections, artifact formats and tests. This feature does not call ELM or publish candidates.
+
+Component files from the specification (PDF parser/CLI implemented; candidate generation remains planned):
 
 | File | Purpose |
 |---|---|
