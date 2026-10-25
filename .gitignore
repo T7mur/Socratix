@@ -55,6 +55,7 @@ pnpm-debug.log*
 *.pid.lock
 
 # Local data / grading scratch files
+outputs/
 /tmp/
 /backend/tmp/
 /grading-worker/tmp/

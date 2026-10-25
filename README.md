@@ -112,3 +112,5 @@ For **Member A**, e.g., set the goal to “extract candidate skill IDs + source 
 - [ ] CI/tests pass, demo/verification evidence and caveats included.
 
 For detailed ownership and implementation requirements consult the component docs; the root `AGENTS.md` also enforces this workflow.
+
+## 8. Script running

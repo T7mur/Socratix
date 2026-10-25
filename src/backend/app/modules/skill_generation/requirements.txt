@@ -1,0 +1,2 @@
+# Offline ingestion only; deliberately independent of API/database dependencies.
+pdfplumber==0.11.9
