@@ -64,11 +64,23 @@ def test_elm(authorization: str = Header("")):
     return {"user": name, "reply": reply.choices[0].message.content}
 
 
-# 7) NEW: teammates ask ELM their own question (dev tokens only)
+# 7) Teammates ask ELM their own question (dev tokens only)
+# Models teammates may choose. Set DEV_MODELS in the secret file, e.g.
+# DEV_MODELS=gpt-4.1-mini,gpt-4o-mini,gpt-4.1
+# If not set, only ELM_MODEL and ELM_MODEL_SMALL are allowed.
+def allowed_dev_models() -> list[str]:
+    listed = [m.strip() for m in os.getenv("DEV_MODELS", "").split(",") if m.strip()]
+    if listed:
+        return listed
+    defaults = [os.getenv("ELM_MODEL", "gpt-4.1-mini"), os.getenv("ELM_MODEL_SMALL", "")]
+    return [m for m in dict.fromkeys(defaults) if m]
+
+
 class AskRequest(BaseModel):
     question: str
     system: str = "You are a helpful assistant. Answer briefly."
-    small_model: bool = False
+    model: str | None = None  # NEW: teammate picks a model (must be in DEV_MODELS)
+    small_model: bool = False  # kept for old scripts
 
 
 @app.post("/api/dev/ask")
@@ -76,7 +88,13 @@ def dev_ask(body: AskRequest, authorization: str = Header("")):
     name = check_dev_token(authorization)
     if len(body.question) > 4000 or len(body.system) > 2000:
         raise HTTPException(status_code=413, detail="Question or instructions too long")
-    model = os.getenv("ELM_MODEL_SMALL" if body.small_model else "ELM_MODEL", "gpt-4.1-mini")
+    allowed = allowed_dev_models()
+    if body.model:
+        if body.model not in allowed:
+            raise HTTPException(status_code=400, detail=f"Model '{body.model}' not allowed. Choose one of: {', '.join(allowed)}")
+        model = body.model
+    else:
+        model = os.getenv("ELM_MODEL_SMALL" if body.small_model else "ELM_MODEL", "gpt-4.1-mini")
     try:
         reply = elm.chat.completions.create(
             model=model,
@@ -88,8 +106,8 @@ def dev_ask(body: AskRequest, authorization: str = Header("")):
             ],
         )
     except Exception as e:
-        print(f"ELM error for {name}: {type(e).__name__}")
-        raise HTTPException(status_code=502, detail="ELM request failed")
+        print(f"ELM error for {name}: {type(e).__name__} (model {model})")
+        raise HTTPException(status_code=502, detail=f"ELM request failed: {type(e).__name__} for model '{model}'")
     print(f"dev ask by {name}, model {model}")  # never log the question or the token
     return {
         "user": name,
@@ -99,7 +117,21 @@ def dev_ask(body: AskRequest, authorization: str = Header("")):
     }
 
 
-# 8) NEW: simple web page for teammates to ask ELM without code
+# 7b) Which models can be chosen, and which ones this ELM key actually has
+@app.get("/api/dev/models")
+def dev_models(authorization: str = Header("")):
+    check_dev_token(authorization)
+    try:
+        available = sorted(m.id for m in elm.models.list().data)
+    except Exception as e:
+        print(f"Model list error: {type(e).__name__}")
+        available = None
+    allowed = allowed_dev_models()
+    usable = [m for m in allowed if available is None or m in available]
+    return {"allowed": allowed, "usable": usable, "available_on_key": available}
+
+
+# 8) Simple web page for teammates to ask ELM without code
 DEV_PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -121,18 +153,36 @@ DEV_PAGE = """<!doctype html>
 <input id="sys" placeholder="You are a helpful assistant. Answer briefly.">
 <label for="q">Your question</label>
 <textarea id="q"></textarea>
-<label><input id="small" type="checkbox" style="width:auto"> Use the small (cheaper) model</label>
+<label for="model">Model (type it, or leave empty for the default)</label>
+<input id="model" list="modellist" placeholder="e.g. gpt-4o-mini" autocomplete="off">
+<datalist id="modellist"></datalist>
+<small id="mnote"></small>
 <button id="ask" type="button">Ask ELM</button>
 <div id="out" aria-live="polite"></div>
 <script>
  const tok = document.getElementById('tok');
  try { tok.value = localStorage.getItem('devToken') || ''; } catch (e) {}
+ async function loadModels() {
+   const list = document.getElementById('modellist'), note = document.getElementById('mnote');
+   if (!tok.value.trim()) return;
+   try {
+     const r = await fetch('/api/dev/models', { headers: { 'Authorization': 'Bearer ' + tok.value.trim() } });
+     const data = await r.json();
+     if (!r.ok) { note.textContent = ''; return; }
+     list.innerHTML = '';
+     data.usable.forEach(function (id) { const o = document.createElement('option'); o.value = id; list.appendChild(o); });
+     note.textContent = data.usable.length ? 'Allowed: ' + data.usable.join(', ') : '';
+   } catch (e) { note.textContent = ''; }
+ }
+ tok.addEventListener('change', loadModels);
+ if (tok.value) loadModels();
  document.getElementById('ask').onclick = async () => {
    const out = document.getElementById('out');
    const btn = document.getElementById('ask');
    try { localStorage.setItem('devToken', tok.value); } catch (e) {}
-   const body = { question: document.getElementById('q').value,
-                  small_model: document.getElementById('small').checked };
+   const body = { question: document.getElementById('q').value };
+   const m = document.getElementById('model').value.trim();
+   if (m) body.model = m;
    const sys = document.getElementById('sys').value.trim();
    if (sys) body.system = sys;
    btn.disabled = true; out.textContent = 'Asking... (first call can take up to a minute)';
