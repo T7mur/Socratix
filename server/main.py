@@ -11,6 +11,7 @@ if not os.getenv("ELM_API_KEY") and os.getenv("ELM_MOCK") != "true":
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 
 app = FastAPI()
@@ -59,3 +60,10 @@ def test_elm(authorization: str = Header("")):
         raise HTTPException(status_code=502, detail="ELM request failed")
     print(f"ELM test call by {name}")  # log the name only, never the token
     return {"user": name, "reply": reply.choices[0].message.content}
+
+# 7) Design prototype: static pages with sample data only (no secrets, no API calls)
+app.mount(
+    "/design",
+    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "web_design"), html=True),
+    name="design",
+)
