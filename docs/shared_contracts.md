@@ -248,8 +248,15 @@ The fields may be omitted instead of `null` where allowed by the Pydantic discri
 
 ## 5. Shared runtime interfaces (Python; implement in `src/backend/app/contracts/`)
 
+Proposed additive capability (2026-10-25, pending Member F/consumer review):
+`generate_text` complements the unchanged canonical `generate_json` interface.
+See [LLM integration](llm_integration.md). Public API DTOs are unaffected.
+
 ```python
 class LLMGatewayProtocol:
+    async def generate_text(self, *, operation: str, model_alias: str,
+                            system_prompt: str, payload: dict) -> str: ...
+
     async def generate_json(self, *, operation: str, model_alias: str,
                             system_prompt: str, payload: dict,
                             schema: type) -> dict: ...

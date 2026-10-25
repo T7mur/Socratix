@@ -67,6 +67,12 @@ flowchart TD
 
 ### ELM integration verification checklist
 
+**Proposed implementation (2026-10-25):** the shared adapter supports configured compatible
+Chat Completions endpoints, plain text and locally validated JSON. LLM-only settings and
+the standalone request CLI do not require DB/Auth. See [integration setup](llm_integration.md)
+and [proposed ADR](adr/0001-compatible-llm-gateway.md). Provider capabilities still require
+credentialed verification. Other backend domain services remain scaffolded.
+
 The [University ELM Python examples](https://information-services.ed.ac.uk/computing/elm/elm-competence-centre/examples-of-how-to-use-elm-with-python-and-elm-api-key/interacting-with-elm-using-python-and-the-elm-api) use the OpenAI SDK, `OPENAI_BASE_URL`, API key and chat completions. Its [model list](https://information-services.ed.ac.uk/computing/elm/elm_competence_centre/elm-models-available-through-the-api) says available models depend on account permissions. The [Swagger UI](https://elm.edina.ac.uk/swagger-ui/index.html) is the live reference; its full OpenAPI details were **not verifiable here**.
 
 Member F must implement a credentialed smoke test: (1) resolve model IDs or call `/models` if supported, (2) test chat completion, (3) request JSON and validate, (4) test streaming only if needed, (5) check rate limits/usage/timeout/error structure, (6) check whether structured response formats are accepted, (7) record **actual supported endpoints and permissions** in an integration ADR. Do not invent `ELM_API_URL` or assume ELM supports OpenAI Responses API or tool calling.

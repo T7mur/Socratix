@@ -19,6 +19,16 @@ This is a **human-readable ledger of meaningful design changes** (not a substitu
 
 ## Baseline
 
+### 2026-10-25 — Shared compatible LLM gateway and operator CLI (Proposed)
+- **Owner / branch / PR:** JK; Member F integration / jk/llm_gateway / pending
+- **Before:** Reserved ELM adapter and JSON protocol, with no runtime implementation.
+- **After:** One async Chat Completions adapter for configured compatible endpoints, validated JSON and plain text, LLM-only settings, backend lifecycle composition and a standalone operator script.
+- **Why:** Reuse a single provider boundary without requiring database/auth setup for manual requests.
+- **Impact:** Additive internal text method, dependencies, tests and documentation; no public routes, DTOs, database migrations or frontend changes.
+- **Verification:** Mock transport and CLI tests; credentialed support remains unverified until a synthetic smoke test succeeds.
+- **Reviewers / decision date:** Member F and affected consumers A–E / pending.
+- **ADR:** [Compatible LLM gateway](../adr/0001-compatible-llm-gateway.md).
+
 ### 2026-10-23 — Initial handoff and repository governance (Accepted as documentation baseline)
 - **Owner / branch / PR:** Team setup / to be assigned / not yet opened
 - **Component(s):** root README.md, AGENTS.md, docs/*
