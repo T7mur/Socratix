@@ -13,6 +13,7 @@ from app.core.security import require_admin
 from app.db.models.curriculum import CurriculumSource
 from app.db.models.identity import User
 from app.db.repositories.catalogue import CatalogueRepository, queue_item
+from app.db.repositories.skill_imports import SkillImportRepository
 from app.db.session import get_db_session, transaction
 from app.modules.skill_generation.reviewer import review_candidate
 
@@ -54,6 +55,9 @@ async def detail(
     repo = CatalogueRepository(session)
     row = await repo.get_review_candidate(resource_type.value, id, resource_version)
     source = await session.get(CurriculumSource, row.source_id)
+    evidence = await SkillImportRepository(session).evidence(resource_type.value, id, resource_version)
+    if source.rights_status != "permitted":
+        evidence = [{**item, "excerpt": None} for item in evidence]
     return {
         **queue_item(row),
         "payload": row.payload,
@@ -65,6 +69,7 @@ async def detail(
             "checksum": source.checksum,
         },
         "validation_errors": await repo.validation_errors(row),
+        "evidence": evidence,
     }
 
 

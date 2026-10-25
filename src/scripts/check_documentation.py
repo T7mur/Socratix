@@ -13,6 +13,9 @@ DOCUMENTS = [
     "docs/database_dictionary.md",
     "docs/adr/0001-supabase-auth.md",
     "docs/adr/0002-versioned-persistence.md",
+    "docs/adr/0003-durable-skill-import.md",
+    "docs/skill_import_bridge.md",
+    "docs/skill_import_handoff.md",
 ]
 
 

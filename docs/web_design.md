@@ -6,6 +6,16 @@ The sample provides `/register`, `/login`, `/forgot-password`, `/reset-password`
 
 **Owner:** Member F (Frontend & Integration). **Dependencies:** Member A skills, B exercises, C projects, D plans/selector/gaps, E hinting/verification; **contract:** [shared_contracts.md](shared_contracts.md) v1.0.
 
+## Proposed evidence detail addition
+
+The existing admin candidate panel shows permitted source excerpts, page/section, direct-source
+versus AI-inferred labels, rationale and review flags. Render all source/model content as text;
+do not render HTML or follow model links. Empty evidence retains existing catalogue behavior.
+Students cannot access these details. The existing human reason/decision flow stays authoritative.
+No PDF upload page is added. Frontend configuration rejects SQL URLs and non-public keys rather
+than logging configuration values. Registration callback failures return the safe expired-link
+flow. See [verification/runbook](skill_import_bridge.md).
+
 ## Product goal
 
 Give an Informatics student a workspace where they can choose what to study, inspect **why** an AI recommendation exists, independently solve exercises and design/build projects, request progressively more revealing hints, and understand what evidence backs their learning profile. The interface should make independent effort easier than outsourcing the task to a chatbot.

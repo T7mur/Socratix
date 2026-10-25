@@ -5,7 +5,7 @@ import asyncio
 import json
 from uuid import UUID
 
-from _common import ROOT, settings, validate_target
+from _common import ROOT, configure_event_loop, settings, validate_target
 from app.contracts.enums import ResourceType
 from app.db.models.curriculum import CatalogueRevision, CurriculumSource
 from app.db.repositories.catalogue import CatalogueRepository, lock_catalogue
@@ -77,4 +77,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    configure_event_loop()
     asyncio.run(main())

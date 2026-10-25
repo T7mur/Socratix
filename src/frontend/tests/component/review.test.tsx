@@ -35,6 +35,9 @@ describe("review safeguards", () => {
       payload: { skill_id: "python.test" },
       source: { uri: "https://example.invalid" },
       validation_errors: [],
+      evidence: [{run_id: "run", chunk_id: "chunk", span_id: "span", evidence_kind: "ai_inferred",
+        rationale: "Needs judgement", section: "AI / Demo", page: 1,
+        excerpt: "<script>source()</script>", review_flags: ["Check interpretation"]}],
     } as unknown as ReviewDetails;
     const view = render(
       <CandidateDetail
@@ -48,5 +51,8 @@ describe("review safeguards", () => {
       screen.getByRole("heading", { name: "<script>evil()</script>" }),
     ).toBeInTheDocument();
     expect(view.container.querySelector("script")).toBeNull();
+    expect(screen.getByText("AI inferred · requires human judgement")).toBeInTheDocument();
+    expect(screen.getByText("Check interpretation")).toBeInTheDocument();
+    expect(screen.getByText("<script>source()</script>")).toBeInTheDocument();
   });
 });

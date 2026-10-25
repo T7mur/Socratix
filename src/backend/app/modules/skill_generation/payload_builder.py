@@ -262,7 +262,7 @@ def build_generation_inputs(
             # oversized blocks split at sentences, never arbitrary character truncation.
             groups: list[list[dict]] = []
             current_root = None
-            for block, span in zip(content, all_spans):
+            for block, span in zip(content, all_spans, strict=True):
                 root = block
                 visited = set()
                 while root.parent_id and root.parent_id in by_id:

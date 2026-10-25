@@ -12,6 +12,7 @@ from app.core.errors import ConflictError, ForbiddenError, NotFoundError, Valida
 from app.core.logging import configure_logging, log_failure
 from app.core.security import TokenVerifier
 from app.db.session import create_database, dispose_database
+from app.integrations.elm import ELMGateway
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -20,12 +21,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         config = settings or get_settings()
         configure_logging()
         app.state.database = create_database(config)
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-            app.state.token_verifier = TokenVerifier(config, client)
-            try:
+        try:
+            async with ELMGateway(config) as gateway, httpx.AsyncClient(
+                timeout=10, follow_redirects=False
+            ) as client:
+                app.state.llm_gateway = gateway
+                app.state.token_verifier = TokenVerifier(config, client)
                 yield
-            finally:
-                await dispose_database(app.state.database)
+        finally:
+            await dispose_database(app.state.database)
 
     app = FastAPI(title="Socratix", version="1.0", lifespan=lifespan)
     # Configuration is needed at startup, not while exporting OpenAPI without credentials.

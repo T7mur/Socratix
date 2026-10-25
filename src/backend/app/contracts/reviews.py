@@ -100,6 +100,20 @@ class ReviewDetail(ReviewQueueItem):
     payload: Skill | SkillRelation | Outcome
     source: dict
     validation_errors: list[str]
+    evidence: list["ReviewEvidence"] = Field(default_factory=list)
+
+
+class ReviewEvidence(Contract):
+    run_id: UUID
+    chunk_id: UUID
+    span_id: UUID
+    evidence_kind: Literal["direct_source", "ai_inferred"]
+    rationale: str
+    section: str | None
+    page: int | None
+    locator: dict
+    excerpt: str | None
+    review_flags: list[str] = Field(default_factory=list)
 
 
 class ReviewHistory(Contract):

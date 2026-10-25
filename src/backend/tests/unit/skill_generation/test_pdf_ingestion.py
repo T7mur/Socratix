@@ -5,7 +5,6 @@ import json
 from dataclasses import asdict
 
 import pytest
-
 from app.modules.skill_generation.cli import export_artifacts
 from app.modules.skill_generation.ingestion_models import (
     PARSER_VERSION,

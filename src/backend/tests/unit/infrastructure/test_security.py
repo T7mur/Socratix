@@ -5,10 +5,9 @@ from uuid import uuid4
 import httpx
 import jwt
 import pytest
+from app.core.security import TokenVerifier
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
-
-from app.core.security import TokenVerifier
 
 
 @pytest.fixture

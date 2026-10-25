@@ -11,6 +11,11 @@ Import and seed tools must preserve human approval and immutable versions. Never
 
 ## Standalone LLM request
 
+For the merged PDF → gateway → pending review workflow, see [bridge runbook](../../docs/skill_import_bridge.md).
+`import_skills.py` supports validated artifact import, dry-run, resume and report regeneration.
+`check_services.py` and `check_registration.py` make read-only credential-safe checks.
+`serve_backend.py` configures the Windows-compatible event loop before starting the local API.
+
 Install from the repository root with `uv sync --project src/backend --group dev`.
 Configure `ELM_BASE_URL`, `ELM_API_KEY`, `ELM_MODEL` in the ignored root `.env`.
 

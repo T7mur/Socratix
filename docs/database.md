@@ -8,6 +8,20 @@ Catalogue candidates have immutable revisions and `approval_status`; accepted ro
 
 **Owner:** Member F (Data/Integration) for migrations, roles, backup/configuration. Domain owners propose changes via reviewed migration requests. **Dependencies:** all backend components. **Contract:** [shared_contracts.md](shared_contracts.md) v1.0.
 
+## Proposed migration 0006: import history
+
+Three additional private tables bring the ORM to 41 tables: `skill_import_runs` retains immutable
+fingerprint/source/operator/permission/configuration plus current summary; `skill_import_chunks`
+retains per-run request digests, validated batch results and completion; `skill_candidate_evidence`
+links exact catalogue revisions to source spans and chunks, with direct/inferred rationale.
+Run/chunk identity and successful checkpoints are guarded; evidence is append-only. Existing
+catalogue DTOs and accepted projections are reused. Unit completion and all its pending revisions,
+spans/evidence commit atomically. No model call runs inside a transaction. Source identity/rights
+conflicts are rejected rather than silently updated. New tables are excluded from browser roles.
+The API can read evidence/chunks for admin details but cannot write the ledger. Operator tooling
+uses privileged credentials. Apply reviewed migration/grants before import; keep 0001–0005 frozen.
+See [runbook](skill_import_bridge.md) and the regenerated [dictionary](database_dictionary.md).
+
 ## Role of PostgreSQL
 
 The database records **what skills exist, where they came from, what a student attempted, what assistance was given, and what evidence justifies the current recommendation**. It is not a place to store arbitrary model confidence claims as ground truth.

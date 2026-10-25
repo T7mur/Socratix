@@ -19,6 +19,16 @@ This is a **human-readable ledger of meaningful design changes** (not a substitu
 
 ## Baseline
 
+### 2026-10-25 — Durable skill import bridge (Proposed)
+- **Owner / branch / PR:** JK, A/F integration / jk/skill_import_bridge / pending.
+- **Before:** PDF artifacts, provider gateway and catalogue review operate independently; signup has no credentialed verification.
+- **After:** An operator CLI validates permitted artifacts, checkpoints model results and atomically submits unit-level proposals with span evidence to existing human review. Import runs/chunks/evidence have private durable storage; admin review details expose provenance. Database/auth and gateway lifecycles coexist.
+- **Why:** Make imports inspectable, resumable and independently verifiable without automatic academic approval.
+- **Impact:** Proposed revision 0006, additive admin evidence DTO, generated OpenAPI/types, versioned prompt, component/helper/setup guides and registration tests. Existing migrations remain frozen.
+- **Verification:** Offline unit/contract and browser tests; PostgreSQL tests only on an explicitly disposable target. Provider, signup/email and real-source results recorded separately.
+- **Reviewers / decision date:** Member F and Member A / pending. Migration/contract patches are drafts, not committed or applied to hosted databases before review.
+- **ADR:** [Durable import](../adr/0003-durable-skill-import.md).
+
 ### 2026-10-25 — Accept standard PostgreSQL connection strings (Proposed; user-directed)
 - **Owner / branch / PR:** JK / jk/database / pending
 - **Before:** Users had to replace `postgresql://` with the SQLAlchemy-specific driver prefix and add `sslmode=require` to both application and migration URLs.

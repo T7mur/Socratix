@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => ({
   signUp: vi.fn(),
   resetPasswordForEmail: vi.fn(),
+  signInWithPassword: vi.fn(),
+  signOut: vi.fn(),
 }));
 vi.mock("@/lib/auth/server", () => ({ createClient: async () => ({ auth }) }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-import { requestPasswordReset, signUp } from "@/lib/auth/actions";
+import { requestPasswordReset, signIn, signOut, signUp } from "@/lib/auth/actions";
+import { redirect } from "next/navigation";
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -14,6 +17,42 @@ afterEach(() => {
 });
 
 describe("Auth server action boundaries", () => {
+  const registration = () => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries({ email: " test@example.invalid ",
+      password: "a-long-password", confirmation: "a-long-password", displayName: " Student " }))
+      form.set(key, value);
+    return form;
+  };
+  it("submits signup with a confirmation callback and normalised profile text", async () => {
+    vi.stubEnv("SITE_URL", "http://localhost:3000");
+    auth.signUp.mockResolvedValue({ error: null });
+    expect((await signUp({}, registration())).message).toContain("Check your email");
+    expect(auth.signUp).toHaveBeenCalledWith({ email: "test@example.invalid", password: "a-long-password",
+      options: { emailRedirectTo: "http://localhost:3000/auth/callback?next=/account",
+        data: { display_name: "Student" } } });
+  });
+  it("rejects invalid registration before contacting the provider", async () => {
+    const form = registration();
+    form.set("confirmation", "different-password");
+    expect((await signUp({}, form)).error).toContain("match");
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+  it("does not expose signup provider errors", async () => {
+    vi.stubEnv("SITE_URL", "http://localhost:3000");
+    auth.signUp.mockResolvedValue({ error: { message: "private provider details" } });
+    expect(JSON.stringify(await signUp({}, registration()))).not.toContain("private provider");
+    auth.signUp.mockRejectedValue(new Error("private exception"));
+    expect((await signUp({}, registration())).error).toContain("unavailable");
+  });
+  it("signs in to the account and signs out of the current session", async () => {
+    auth.signInWithPassword.mockResolvedValue({ error: null });
+    await signIn({}, registration());
+    expect(redirect).toHaveBeenCalledWith("/account");
+    await signOut();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(redirect).toHaveBeenCalledWith("/login");
+  });
   it("never sends a signup role from user input", async () => {
     vi.stubEnv("SITE_URL", "https://example.invalid");
     auth.signUp.mockResolvedValue({ error: null });

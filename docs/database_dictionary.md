@@ -112,10 +112,10 @@ Schema owner: Member F; domain access follows the ownership map in database.md. 
 | Column | SQL type | Nullable | Key / default |
 |---|---|---|---|
 | `evidence_id` | `UUID` | no | PK; application-generated default |
-| `student_id` | `UUID` | no | FK → `users.id`; FK → `submissions.student_id` |
+| `student_id` | `UUID` | no | FK → `submissions.student_id`; FK → `users.id` |
 | `attempt_id` | `UUID` | yes | FK → `submissions.attempt_id`; FK → `evaluations.attempt_id` |
 | `evaluation_id` | `UUID` | yes | FK → `evaluations.evaluation_id` |
-| `skill_id` | `VARCHAR` | no | FK → `skills.skill_id`; FK → `learning_outcomes.skill_id` |
+| `skill_id` | `VARCHAR` | no | FK → `learning_outcomes.skill_id`; FK → `skills.skill_id` |
 | `outcome_id` | `VARCHAR` | yes | FK → `learning_outcomes.outcome_id` |
 | `stage` | `VARCHAR` | yes | — |
 | `event_type` | `VARCHAR` | no | — |
@@ -277,8 +277,8 @@ Schema owner: Member F; domain access follows the ownership map in database.md. 
 | `evaluation_id` | `UUID` | no | PK; application-generated default |
 | `attempt_id` | `UUID` | no | FK → `submissions.attempt_id` |
 | `evaluation_version` | `INTEGER` | no | — |
-| `activity_id` | `UUID` | no | FK → `submissions.activity_id`; FK → `grading_artifacts.activity_id` |
-| `activity_version` | `INTEGER` | no | FK → `grading_artifacts.activity_version`; FK → `submissions.activity_version` |
+| `activity_id` | `UUID` | no | FK → `grading_artifacts.activity_id`; FK → `submissions.activity_id` |
+| `activity_version` | `INTEGER` | no | FK → `submissions.activity_version`; FK → `grading_artifacts.activity_version` |
 | `artifact_id` | `UUID` | yes | FK → `grading_artifacts.artifact_id` |
 | `artifact_version` | `INTEGER` | yes | FK → `grading_artifacts.artifact_version` |
 | `grader_identity` | `VARCHAR` | no | — |
@@ -411,8 +411,8 @@ Schema owner: Member F; domain access follows the ownership map in database.md. 
 |---|---|---|---|
 | `artifact_id` | `UUID` | no | PK |
 | `artifact_version` | `INTEGER` | no | PK |
-| `activity_id` | `UUID` | no | FK → `project_milestones.project_id`; FK → `activities.id` |
-| `activity_version` | `INTEGER` | no | FK → `activities.version`; FK → `project_milestones.project_version` |
+| `activity_id` | `UUID` | no | FK → `activities.id`; FK → `project_milestones.project_id` |
+| `activity_version` | `INTEGER` | no | FK → `project_milestones.project_version`; FK → `activities.version` |
 | `milestone_id` | `VARCHAR` | yes | FK → `project_milestones.milestone_id` |
 | `reference_solution_ref` | `TEXT` | yes | — |
 | `hidden_test_suite_ref` | `TEXT` | yes | — |
@@ -671,10 +671,10 @@ Schema owner: Member F; domain access follows the ownership map in database.md. 
 | Column | SQL type | Nullable | Key / default |
 |---|---|---|---|
 | `reflection_id` | `UUID` | no | PK; application-generated default |
-| `student_id` | `UUID` | no | FK → `submissions.student_id`; FK → `activities.student_id`; FK → `users.id` |
+| `student_id` | `UUID` | no | FK → `users.id`; FK → `submissions.student_id`; FK → `activities.student_id` |
 | `course_id` | `UUID` | no | FK → `courses.id` |
 | `activity_id` | `UUID` | yes | FK → `activities.id`; FK → `submissions.activity_id` |
-| `activity_version` | `INTEGER` | yes | FK → `activities.version`; FK → `submissions.activity_version` |
+| `activity_version` | `INTEGER` | yes | FK → `submissions.activity_version`; FK → `activities.version` |
 | `attempt_id` | `UUID` | yes | FK → `submissions.attempt_id`; FK → `submissions.attempt_id` |
 | `reflection_text` | `TEXT` | no | — |
 | `reported_confidence` | `FLOAT` | yes | — |
@@ -767,6 +767,35 @@ Constraints and query indexes:
 - Foreign key `(source_id)` → `(curriculum_sources.id)`
 - Unique: `skill_id, alias`
 
+## skill_candidate_evidence
+
+Proposed 0006: append-only links from exact candidate revisions to source spans and import chunks.
+
+Schema owner: Member F; domain access follows the ownership map in database.md. All direct SQL access is backend-only; private learner rows require owner checks. Audit/history records are append-only; activity children freeze with their parent; derived models and job state remain mutable.
+
+| Column | SQL type | Nullable | Key / default |
+|---|---|---|---|
+| `id` | `UUID` | no | PK; application-generated default |
+| `run_id` | `UUID` | no | FK → `skill_import_chunks.run_id` |
+| `chunk_id` | `UUID` | no | FK → `skill_import_chunks.chunk_id` |
+| `resource_type` | `VARCHAR` | no | FK → `catalogue_revisions.resource_type` |
+| `resource_id` | `VARCHAR` | no | FK → `catalogue_revisions.resource_id` |
+| `resource_version` | `INTEGER` | no | FK → `catalogue_revisions.resource_version` |
+| `span_id` | `UUID` | no | FK → `source_spans.id` |
+| `evidence_kind` | `VARCHAR` | no | — |
+| `rationale` | `TEXT` | no | — |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | no | server default `now()` |
+
+Constraints and query indexes:
+
+- `ck_skill_candidate_evidence_evidence_kind_values`: `evidence_kind IN ('direct_source','ai_inferred')`
+- `ck_skill_candidate_evidence_positive_version`: `resource_version >= 1`
+- `ck_skill_candidate_evidence_resource_type_values`: `resource_type IN ('skill','relation','outcome')`
+- Foreign key `(resource_type, resource_id, resource_version)` → `(catalogue_revisions.resource_type, catalogue_revisions.resource_id, catalogue_revisions.resource_version)`
+- Foreign key `(run_id, chunk_id)` → `(skill_import_chunks.run_id, skill_import_chunks.chunk_id)`
+- Foreign key `(span_id)` → `(source_spans.id)`
+- Unique: `run_id, chunk_id, resource_type, resource_id, resource_version, span_id`
+
 ## skill_estimates
 
 Recomputable policy-versioned indices; null means insufficient observations, not zero mastery.
@@ -796,6 +825,55 @@ Constraints and query indexes:
 - `ck_skill_estimates_understanding_index_range`: `understanding_index BETWEEN 0 AND 1`
 - Foreign key `(skill_id)` → `(skills.skill_id)`
 - Foreign key `(student_id)` → `(users.id)`
+
+## skill_import_chunks
+
+Proposed 0006: durable validated model checkpoints and per-unit completion; not student jobs.
+
+Schema owner: Member F; domain access follows the ownership map in database.md. All direct SQL access is backend-only; private learner rows require owner checks. Audit/history records are append-only; activity children freeze with their parent; derived models and job state remain mutable.
+
+| Column | SQL type | Nullable | Key / default |
+|---|---|---|---|
+| `run_id` | `UUID` | no | PK; FK → `skill_import_runs.id` |
+| `chunk_id` | `UUID` | no | PK |
+| `section_code` | `VARCHAR` | no | — |
+| `request_digest` | `VARCHAR` | no | — |
+| `status` | `VARCHAR` | no | default `queued` |
+| `result` | `JSONB` | yes | — |
+| `error_code` | `VARCHAR` | yes | — |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | no | server default `now()` |
+
+Constraints and query indexes:
+
+- `ck_skill_import_chunks_completed_result`: `status <> 'succeeded' OR result IS NOT NULL`
+- `ck_skill_import_chunks_status_values`: `status IN ('queued','running','succeeded','failed','review_required')`
+- Foreign key `(run_id)` → `(skill_import_runs.id)`
+
+## skill_import_runs
+
+Proposed 0006: private operator import identity, permission reference, configuration and summary.
+
+Schema owner: Member F; domain access follows the ownership map in database.md. All direct SQL access is backend-only; private learner rows require owner checks. Audit/history records are append-only; activity children freeze with their parent; derived models and job state remain mutable.
+
+| Column | SQL type | Nullable | Key / default |
+|---|---|---|---|
+| `id` | `UUID` | no | PK; application-generated default |
+| `fingerprint` | `VARCHAR` | no | — |
+| `source_id` | `UUID` | no | FK → `curriculum_sources.id` |
+| `actor_id` | `UUID` | no | FK → `users.id` |
+| `permission_ref` | `TEXT` | no | — |
+| `configuration` | `JSONB` | no | — |
+| `status` | `VARCHAR` | no | default `queued` |
+| `summary` | `JSONB` | no | application-generated default |
+| `finished_at` | `TIMESTAMP WITH TIME ZONE` | yes | — |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | no | server default `now()` |
+
+Constraints and query indexes:
+
+- `ck_skill_import_runs_status_values`: `status IN ('queued','running','succeeded','failed','review_required')`
+- Foreign key `(actor_id)` → `(users.id)`
+- Foreign key `(source_id)` → `(curriculum_sources.id)`
+- Unique: `fingerprint`
 
 ## skill_relations
 
@@ -905,8 +983,8 @@ Schema owner: Member F; domain access follows the ownership map in database.md. 
 | Column | SQL type | Nullable | Key / default |
 |---|---|---|---|
 | `attempt_id` | `UUID` | no | PK; application-generated default |
-| `student_id` | `UUID` | no | FK → `users.id`; FK → `activities.student_id` |
-| `activity_id` | `UUID` | no | FK → `project_milestones.project_id`; FK → `activities.id` |
+| `student_id` | `UUID` | no | FK → `activities.student_id`; FK → `users.id` |
+| `activity_id` | `UUID` | no | FK → `activities.id`; FK → `project_milestones.project_id` |
 | `activity_version` | `INTEGER` | no | FK → `project_milestones.project_version`; FK → `activities.version` |
 | `milestone_id` | `VARCHAR` | yes | FK → `project_milestones.milestone_id` |
 | `assessment_stage` | `VARCHAR` | no | — |

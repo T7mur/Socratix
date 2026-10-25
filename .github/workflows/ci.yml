@@ -15,7 +15,7 @@ jobs:
           python-version: '3.11'
       - run: pip install uv
       - run: uv sync --project src/backend --frozen
-      - run: uv run --project src/backend ruff check src/backend/app src/backend/tests src/scripts
+      - run: uv run --project src/backend ruff check --config src/backend/pyproject.toml src/backend/app src/backend/tests src/scripts
       - run: uv run --project src/backend pytest src/backend/tests -q
       - run: uv run --project src/backend alembic -c src/backend/alembic.ini upgrade head --sql > /tmp/socratix-upgrade.sql
       - run: uv run --project src/backend python src/scripts/export_openapi.py

@@ -8,6 +8,9 @@ from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy.dialects import postgresql
 
 PURPOSES = {
+    "skill_import_runs": "Proposed 0006: private operator import identity, permission reference, configuration and summary.",
+    "skill_import_chunks": "Proposed 0006: durable validated model checkpoints and per-unit completion; not student jobs.",
+    "skill_candidate_evidence": "Proposed 0006: append-only links from exact candidate revisions to source spans and import chunks.",
     "users": "Application profiles linked by UUID to Supabase Auth. Roles are application-owned; no passwords are stored.",
     "user_role_events": "Append-only operator audit of application role assignments.",
     "courses": "Course catalogue and lifecycle metadata.",

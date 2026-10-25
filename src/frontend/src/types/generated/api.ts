@@ -175,6 +175,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Evidence */
+            evidence?: components["schemas"]["ReviewEvidence"][];
             /** Payload */
             payload: components["schemas"]["Skill"] | components["schemas"]["SkillRelation"] | components["schemas"]["Outcome"];
             /** Resource Id */
@@ -190,6 +192,49 @@ export interface components {
             title: string;
             /** Validation Errors */
             validation_errors: string[];
+        };
+        /** ReviewEvidence */
+        ReviewEvidence: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Contract Version
+             * @default 1.0
+             * @constant
+             */
+            contract_version: "1.0";
+            /**
+             * Evidence Kind
+             * @enum {string}
+             */
+            evidence_kind: "direct_source" | "ai_inferred";
+            /** Excerpt */
+            excerpt: string | null;
+            /** Locator */
+            locator: {
+                [key: string]: unknown;
+            };
+            /** Page */
+            page: number | null;
+            /** Rationale */
+            rationale: string;
+            /** Review Flags */
+            review_flags?: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Section */
+            section: string | null;
+            /**
+             * Span Id
+             * Format: uuid
+             */
+            span_id: string;
         };
         /** ReviewHistory */
         ReviewHistory: {

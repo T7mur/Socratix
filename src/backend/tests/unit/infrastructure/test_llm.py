@@ -6,12 +6,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-from pydantic import BaseModel, ValidationError
-
 from app.core.config import Settings
 from app.core.llm_config import LLMSettings
 from app.integrations.elm import ELMGateway, LLMConfigurationError, LLMOutputError, LLMProviderError
 from app.main import create_app
+from pydantic import BaseModel, ValidationError
 
 ROOT = Path(__file__).resolve().parents[5]
 SCRIPT = ROOT / "src/scripts/llm_request.py"
@@ -215,13 +214,16 @@ async def test_cancellation_and_cleanup():
 
 
 async def test_app_lifespan_no_network_and_openapi():
-    app = create_app(Settings(_env_file=None))
+    app = create_app(Settings(_env_file=None,
+        database_url="postgresql://test:secret@example.invalid/postgres",
+        supabase_url="https://example.supabase.co"))
     before = app.openapi()
     async with app.router.lifespan_context(app):
         assert app.state.llm_gateway._client is None
     assert app.state.llm_gateway._closed
     assert app.openapi() == before
-    assert before["paths"] == {}
+    assert "/api/v1/me" in before["paths"]
+    assert "/api/v1/reviews" in before["paths"]
 
 
 def test_cli_precedence_and_output(monkeypatch, tmp_path, capsys):

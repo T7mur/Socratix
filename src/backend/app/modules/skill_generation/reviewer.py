@@ -1,14 +1,13 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.contracts.enums import ResourceType
 from app.contracts.reviews import ReviewDecisionCreate
 from app.core.errors import ConflictError, ForbiddenError, ValidationError
 from app.db.models.curriculum import CatalogueRevision, ReviewDecision
 from app.db.models.identity import User
 from app.db.repositories.catalogue import CatalogueRepository, lock_catalogue
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def review_candidate(

@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.output is None:
             args.output = (
-                Path("../../outputs") / f"{args.pdf.stem}-{checksum[:12]}-{uuid4().hex[:8]}"
+                Path("outputs") / f"{args.pdf.stem}-{checksum[:12]}-{uuid4().hex[:8]}"
             )
         corrections = (
             json.loads(args.corrections.read_text(encoding="utf-8"))

@@ -8,10 +8,6 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, func, select, text
-from sqlalchemy.exc import IntegrityError
-from test_database import ROOT, decision, seed
-
 from app.core.errors import NotFoundError
 from app.db.models.activities import Activity, GradingArtifact
 from app.db.models.evidence import AssessmentEvent
@@ -20,6 +16,9 @@ from app.db.models.jobs import Evaluation, OutboxMessage, Submission
 from app.db.repositories.activities import ActivityRepository
 from app.db.repositories.catalogue import CatalogueRepository
 from app.db.repositories.evidence import EvidenceRepository
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.exc import IntegrityError
+from test_database import ROOT, decision, seed
 
 
 async def learning_setup(db):

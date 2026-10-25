@@ -7,12 +7,16 @@ export async function GET(request: Request) {
   const origin = process.env.SITE_URL ?? url.origin;
   const code = url.searchParams.get("code");
   if (code) {
-    const client = await createClient();
-    const { error } = await client.auth.exchangeCodeForSession(code);
-    if (!error)
-      return NextResponse.redirect(
-        new URL(safeNext(url.searchParams.get("next")), origin),
-      );
+    try {
+      const client = await createClient();
+      const { error } = await client.auth.exchangeCodeForSession(code);
+      if (!error)
+        return NextResponse.redirect(
+          new URL(safeNext(url.searchParams.get("next")), origin),
+        );
+    } catch {
+      // No callback code, cookie or provider detail is logged or shown.
+    }
   }
   return NextResponse.redirect(new URL("/login?notice=expired-link", origin));
 }

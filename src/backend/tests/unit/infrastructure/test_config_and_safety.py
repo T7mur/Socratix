@@ -1,16 +1,15 @@
 import logging
 
 import pytest
-from pydantic import ValidationError as SchemaError
-from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
-
 from app.core.config import Settings
 from app.core.errors import ValidationError
 from app.core.logging import log_failure
 from app.db.repositories.common import validate_public_payload
 from app.db.session import connection_args, create_database, dispose_database
 from app.modules.skill_generation.relation_validator import validate_acyclic, validate_endpoints_exist
+from pydantic import ValidationError as SchemaError
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 
 
 @pytest.mark.parametrize("field", ["database_url", "migration_database_url"])

@@ -1,11 +1,10 @@
 from uuid import uuid4
 
-from httpx import ASGITransport, AsyncClient
-
 from app.core.security import get_current_user
 from app.db.models.identity import User
 from app.db.session import get_db_session
 from app.main import create_app
+from httpx import ASGITransport, AsyncClient
 
 
 async def test_students_cannot_access_any_review_route():

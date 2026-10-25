@@ -4,10 +4,6 @@ import json
 import shutil
 
 import pytest
-from PIL import Image
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen.canvas import Canvas
-
 from app.modules.skill_generation.cli import main
 from app.modules.skill_generation.ingestion_models import (
     IngestionError,
@@ -16,6 +12,9 @@ from app.modules.skill_generation.ingestion_models import (
 )
 from app.modules.skill_generation.parser import extract_pdf, parse_pdf
 from app.modules.skill_generation.payload_builder import build_generation_inputs
+from PIL import Image
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen.canvas import Canvas
 
 
 def make_pdf(path, scanned=False):

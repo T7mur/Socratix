@@ -29,6 +29,16 @@ API_BASE_URL=http://localhost:8000
 
 The publishable key is designed for the browser. Never substitute a secret/service-role key or database password. Neither a Supabase secret key nor a JWT signing secret is needed by FastAPI's asymmetric verifier.
 
+## Local verification tools
+
+`src/scripts/check_services.py` performs read-only configuration/Auth/JWKS/database checks,
+printing booleans and safe status values. `src/scripts/check_registration.py --email ADDRESS
+--target development` checks confirmation and exactly matching application UUID/profile count
+through the operator connection, without printing tokens/passwords. Frontend `.env.local` must
+use the HTTPS Auth origin, not a copied SQL pooler connection URL. Startup and Windows-compatible
+commands are in [the bridge runbook](skill_import_bridge.md). Existing confirmed accounts do
+not prove signup; use a separate address and the initiating browser for a new student test.
+
 ## User journeys
 
 - Register → confirmation email → callback exchanges the code → account page. A first API request idempotently creates a student profile. User-controlled metadata supplies display text only and cannot grant roles.

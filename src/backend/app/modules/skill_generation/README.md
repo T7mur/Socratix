@@ -4,13 +4,17 @@
 
 Turn permitted source spans into proposals, deterministic graph validation and auditable human approval. Consumers receive `ApprovedSkillGraph` with approved skills, outcomes and relationships only.
 
-Files from the specification (reviewer, repository and relation validator implemented; extraction remains planned):
+The proposed bridge now includes `import_artifacts.py`, `candidates.py` and `importer.py`.
+It uses F's private import repository and migration 0006, both pending owner review.
+See [commands, artifacts, failure handling and verification](../../../../../docs/skill_import_bridge.md).
+
+Files from the specification (reviewer, repository and relation validator implemented):
 Implemented offline ingestion: `python -m app.modules.skill_generation.cli --help` from `src/backend`.
 Install `requirements.txt` in this directory; tests additionally use `requirements-dev.txt`.
 See the specification's **Offline PDF ingestion** section for OCR setup, rights-gated exports,
 corrections, artifact formats and tests. This feature does not call ELM or publish candidates.
 
-Component files from the specification (PDF parser/CLI implemented; candidate generation remains planned):
+Component files from the original specification (the bridge uses the modules listed above):
 
 | File | Purpose |
 |---|---|
@@ -22,7 +26,7 @@ Component files from the specification (PDF parser/CLI implemented; candidate ge
 | `reviewer.py` | Human approval and review audit |
 | `repository.py` | Owned persistence and approved graph reads |
 
-Also owned: `src/backend/app/api/v1/skills.py`, `src/shared/prompts/skill/`, and `src/backend/tests/{unit,contract,integration}/skill_generation/`. Extraction/prompt files remain planned; the review and persistence subset is implemented.
+Also owned: reserved `src/backend/app/api/v1/skills.py`, `src/shared/prompts/skill/`, and `src/backend/tests/{unit,contract,integration}/skill_generation/`. The bridge is an operator CLI; it does not implement the reserved import HTTP route.
 
 Test provenance, repeat imports, duplicates, dangling IDs, both cycle types, authenticated review and approved-only reads. F owns schema/migrations; B/C/D/E consume approved snapshots through interfaces. Never publish an inferred edge solely on model agreement.
 

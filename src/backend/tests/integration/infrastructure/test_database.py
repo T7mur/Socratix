@@ -4,10 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
-
 from app.contracts.enums import ResourceType
 from app.contracts.reviews import ReviewDecisionCreate
 from app.core.errors import ConflictError, ForbiddenError, ValidationError
@@ -19,6 +15,9 @@ from app.db.repositories.users import UserRepository
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.skill_generation.reviewer import review_candidate
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[5]
 

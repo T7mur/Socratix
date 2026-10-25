@@ -8,7 +8,7 @@ export default defineConfig({
     viewport: { width: 1440, height: 1000 },
   },
   webServer: {
-    command: "npm run start -- --port 3100",
+    command: "node node_modules/next/dist/bin/next start --port 3100",
     url: "http://localhost:3100",
     reuseExistingServer: !process.env.CI,
   },

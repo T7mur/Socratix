@@ -20,6 +20,22 @@ All other routes listed in this document remain planned unless present in the ge
 
 **Owner:** Member F (Full-stack/Integration). **All members must read this first.** Changes to public DTOs/routes require a reviewed PR, updated Pydantic schemas, regenerated frontend types, and contract tests. No agent should privately change field names.
 
+## Proposed additive admin evidence contract — 2026-10-25
+
+Existing admin `GET /api/v1/reviews/{resource_type}/{id}?resource_version=N` adds
+`evidence: ReviewEvidence[]` (default empty). Each item has `contract_version`, `run_id`,
+`chunk_id`, `span_id`, `evidence_kind: direct_source|ai_inferred`, `rationale`, `section`,
+`page`, `locator`, nullable `excerpt`, and `review_flags: string[]`. It is admin-only and never
+included in student DTOs. Excerpts are null when rights are not permitted. Older schema 0005
+returns an empty list. No import HTTP endpoints or student job schemas are added.
+
+Internal `SkillCandidateBatch` wraps canonical Skill/Outcome/SkillRelation lists, evidence
+mappings and review flags. Evidence uses canonical skill/outcome IDs; relationship evidence
+uses the internal key `from_skill_id|relation|to_skill_id` and the importer assigns its UUID.
+This is an internal model-response envelope, not an alternate skill schema or public import DTO.
+All generated candidates remain proposed. Member F/A review is pending. OpenAPI and generated
+TypeScript are updated together. See [bridge](skill_import_bridge.md).
+
 ## 1. Vocabulary
 
 | Term | Meaning |

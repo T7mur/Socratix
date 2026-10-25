@@ -5,9 +5,11 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+from app.core.llm_config import LLMSettings
 
 
 def normalize_database_url(value: str | SecretStr) -> SecretStr:
@@ -26,7 +28,7 @@ def normalize_database_url(value: str | SecretStr) -> SecretStr:
     return SecretStr(normalized.render_as_string(hide_password=False))
 
 
-class Settings(BaseSettings):
+class Settings(LLMSettings):
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore", populate_by_name=True, hide_input_in_errors=True
     )

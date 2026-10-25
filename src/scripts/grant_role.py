@@ -4,7 +4,7 @@ import argparse
 import asyncio
 from uuid import UUID
 
-from _common import settings, validate_target
+from _common import configure_event_loop, settings, validate_target
 from app.contracts.enums import Role
 from app.db.repositories.users import UserRepository
 from app.db.session import create_database, dispose_database, transaction
@@ -39,4 +39,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    configure_event_loop()
     asyncio.run(main())

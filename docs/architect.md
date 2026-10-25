@@ -6,6 +6,17 @@ The user selected Supabase for **PostgreSQL and Auth**. See [ADR 0001](adr/0001-
 
 **Owner / approver:** Member F (Full-stack & Integration). **Contract:** [shared_contracts.md](shared_contracts.md) v1.0. **Status:** proposed for MVP. Changes to system boundaries need owner approval from all impacted components.
 
+## Proposed operator import bridge
+
+The offline PDF CLI exports evidence; `src/scripts/import_skills.py` validates selected units,
+calls the shared gateway sequentially, checkpoints validated chunks and commits whole units as
+pending catalogue revisions. Member F's import repository owns source/span/ledger writes. A
+session advisory lock serializes the same fingerprint; no transaction spans provider calls.
+Human review remains the only publication path. No upload route or worker is introduced.
+Database/auth and the lazy gateway coexist in FastAPI's lifecycle. See [runbook](skill_import_bridge.md)
+and [proposed ADR](adr/0003-durable-skill-import.md). Migration 0006 and additive evidence DTO
+await A/F review; hosted end-to-end operation is not claimed.
+
 ## Mission and scope
 
 Socratix helps Informatics students become **independent problem solvers** through diagnostic recall → understanding → transfer, verified personalised exercises and projects, four-stage Socratic assistance, reflective planning, and delayed unaided reassessment. Optimize for subsequent unassisted performance, **not** for number of tasks solved with AI.

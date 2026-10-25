@@ -7,16 +7,16 @@ Read the [source map](../README.md) and [architecture](../../docs/architect.md).
 | Location | Responsibility | Owner |
 |---|---|---|
 | `app/main.py` | App creation, dependency composition and router registration | F |
-The shared LLM gateway, LLM-only settings and minimal FastAPI lifespan composition are
-implemented on `jk/llm_gateway`. Other services in this main-based worktree remain scaffolded.
-See [LLM setup and standalone CLI](../../docs/llm_integration.md) for locked dependency
-installation, examples, behaviour and integration notes for the separate database branch.
+The shared gateway now coexists with database/auth lifecycle management. The proposed
+[operator import bridge](../../docs/skill_import_bridge.md) connects prepared PDF artifacts to
+pending catalogue revisions with durable evidence. Migration 0006 and contract changes await
+Member A/F review. See the runbook for current live-verification limitations.
 
-Read the [source map](../README.md) and [architecture](../../docs/architect.md). The gateway and app lifecycle run; domain routes and persistence remain planned.
+Read the [source map](../README.md) and [architecture](../../docs/architect.md). Other tutor-domain routes remain planned.
 
 | Location | Responsibility | Owner |
 |---|---|---|
-| `app/main.py` | App creation and gateway lifecycle; domain router registration planned | F |
+| `app/main.py` | Database/auth/gateway composition and identity/review routes | F |
 | `app/api/v1/` | Thin authenticated HTTP handlers, one owner per file | See [API ownership](../README.md#api-file-ownership) |
 | `app/contracts/` | Canonical Pydantic DTOs, enums and boundary protocols | F, with affected-owner review |
 | `app/core/` | Configuration, security, errors and logging | F |
@@ -32,8 +32,4 @@ Read [shared contracts](../../docs/shared_contracts.md) before adding interfaces
 
 Workers delegate generation, assessment orchestration and evidence updates to the owning domain services. All execution of student and generated reference code goes through the separate grading worker. Long model calls belong in background jobs, not public request handlers.
 
-<<<<<<< HEAD
 The database/review slice includes the Python manifest, package initialisation, entry points and test configuration. Shared files are edited through F so separate feature branches can focus on their own folders.
-=======
-The Python manifest, package initialisation, minimal app entry point and gateway tests are implemented. Shared files are edited through F so separate feature branches can focus on their own folders.
->>>>>>> jk/llm_gateway

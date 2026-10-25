@@ -1,5 +1,7 @@
 """Shared paths and migration configuration for operator commands."""
 
+import asyncio
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -8,6 +10,12 @@ from app.core.config import Settings
 from sqlalchemy.engine import make_url
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def configure_event_loop() -> None:
+    """psycopg async requires a selector loop on Windows; no effect elsewhere."""
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def settings() -> Settings:

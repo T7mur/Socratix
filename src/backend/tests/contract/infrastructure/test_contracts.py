@@ -2,14 +2,13 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
-
 from app.contracts.reviews import ReviewDecisionCreate
 from app.db import models  # noqa: F401
 from app.db.base import Base
 from app.main import create_app
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 ROOT = Path(__file__).resolve().parents[5]
 
@@ -32,7 +31,7 @@ def test_decision_contract_is_canonical():
 
 
 def test_schema_is_private_and_postgres_ddl_compiles():
-    assert len(Base.metadata.tables) == 38
+    assert len(Base.metadata.tables) == 41
     for table in Base.metadata.sorted_tables:
         assert table.schema == "socratix"
         assert "CREATE TABLE socratix." in str(CreateTable(table).compile(dialect=postgresql.dialect()))
@@ -45,7 +44,7 @@ def test_migrations_are_frozen_and_guards_are_embedded():
 
     folder = ROOT / "src/backend/migrations"
     revisions = list((folder / "versions").glob("*.py"))
-    assert len(revisions) == 5
+    assert len(revisions) == 6
     for revision in revisions:
         content = revision.read_text(encoding="utf-8")
         assert "create_all" not in content and "from app" not in content

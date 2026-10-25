@@ -8,10 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src" / "backend"))
 
-from pydantic import ValidationError  # noqa: E402
-
 from app.core.llm_config import LLMSettings  # noqa: E402
 from app.integrations.elm import ELMGateway, LLMConfigurationError, LLMError  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 
 def parser() -> argparse.ArgumentParser:

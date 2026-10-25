@@ -111,11 +111,11 @@ CLI `--help` ran successfully. Locked environment: Python 3.11.1, OpenAI SDK 2.5
 No credentialed request was sent: local configuration did not provide a usable endpoint
 and model. No ELM or other external provider support is claimed from these mocked checks.
 
-Main is scaffold-only. The other checkout's database/auth settings, app and manifest were
-uncommitted and were not imported. When integrating branches, retain its services/dependencies,
-compose `LLMSettings` into its settings and nest gateway cleanup in its existing lifespan.
-Do not replace the database app with this branch's minimal composition. No public API changes
-or generated frontend clients are needed. Reviews remain pending.
+The integration branch now composes `LLMSettings` into database/auth settings and creates one
+gateway alongside those services. The operator CLI creates its own context-managed gateway.
+The [skill import bridge](skill_import_bridge.md) supplies the candidate schema and prompt;
+provider support remains subject to a credentialed check. The gateway itself adds no public
+API; the bridge separately proposes an additive admin evidence response. Reviews remain pending.
 
 Reuse decision: no committed compatible settings/HTTP helper exists on main. The CLI reuses
 the adapter. The database checkout's `_common.py` requires DB/Auth and is not imported.

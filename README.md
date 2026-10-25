@@ -6,6 +6,10 @@ The database and catalogue-review foundation now has executable backend/frontend
 
 **Everyone starts here.** Do not ask your coding agent to build an entire product from the diagram. Assign one owned feature with a precise contract, mock its dependencies, run tests and open a reviewed pull request.
 
+The proposed [skill import bridge runbook](docs/skill_import_bridge.md) covers PDF artifacts →
+LLM candidates → durable pending review, reports/storage and real signup verification. See its
+[implementation handoff](docs/skill_import_handoff.md) for actual checks and remaining external gates.
+
 The [source map and folder ownership guide](src/README.md) shows the implementation under `src/`, with component guides and separate test/prompt directories. Database/catalogue services are implemented; remaining domain services and external deployments require their own integration work.
 
 ## 1. Team responsibilities and where to read

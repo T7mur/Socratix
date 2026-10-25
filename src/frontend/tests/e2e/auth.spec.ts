@@ -32,3 +32,18 @@ test("mobile registration layout keeps controls visible", async ({ page }) => {
     fullPage: true,
   });
 });
+
+test("registration validates matching passwords without creating an account", async ({ page }) => {
+  await page.goto("/register");
+  await page.getByLabel("Your name").fill("Synthetic browser test");
+  await page.getByLabel("Email address").fill("synthetic@example.invalid");
+  await page.getByLabel("Password", { exact: true }).fill("synthetic-password-one");
+  await page.getByLabel("Confirm password", { exact: true }).fill("synthetic-password-two");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("The passwords do not match.")).toBeVisible();
+});
+
+test("missing confirmation code returns a safe expired-link message", async ({ page }) => {
+  await page.goto("/auth/callback");
+  await expect(page).toHaveURL(/\/login\?notice=expired-link/);
+});

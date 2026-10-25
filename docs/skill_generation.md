@@ -2,7 +2,7 @@
 
 ## Implemented persistence/review subset — Proposed
 
-`reviewer.py`, `relation_validator.py` and `repository.py` now connect to F's reviewed persistence adapters. Candidate payloads and source IDs are stored in immutable numbered revisions; admin decisions validate permitted provenance and endpoints/cycles atomically, then publish exact graph snapshots. Pending edits preserve accepted records. Extraction, parsing, normalisation and LLM prompts remain owned future work. Discover reusable functions in [shared_helpers.md](shared_helpers.md).
+`reviewer.py`, `relation_validator.py` and `repository.py` connect to F's persistence adapters. The proposed operator bridge now connects offline parsing to the gateway and pending revisions, with durable checkpoints and exact span evidence. Human approval still publishes immutable graph snapshots; pending edits preserve accepted records. See [bridge execution and verification](skill_import_bridge.md). No hosted import or academic approval is implied. Discover reusable functions in [shared_helpers.md](shared_helpers.md).
 
 **Owner:** Member A (Curriculum/Graph) • **Dependencies:** Member F DB/LLM adapter • **Consumers:** D Selector, B Exercise, C Project, E Tutor • **Contract:** [shared_contracts.md](shared_contracts.md) v1.0
 
@@ -124,8 +124,9 @@ continuation links account for every character exactly once as primary evidence.
 serialized envelope is at most `--max-payload-bytes` (24,000 UTF-8 bytes by default), including
 the system prompt and supplied `--existing-skills <JSON array>`. This is not a token budget.
 Unsplit sentences, required context or supplied skills that cannot fit block the entire unit with
-`unsplittable_block_exceeds_payload_limit`; no partial unit is silently exported. The future gateway
-must add model-specific context/output budgeting and the accepted candidate response schema.
+`unsplittable_block_exceeds_payload_limit`; no partial unit is silently exported. The proposed
+bridge supplies a candidate envelope around canonical DTOs. Operators still need a model with
+adequate context/output capacity for input plus schema; payload bytes are not a token guarantee.
 
 The versioned prompt is `src/shared/prompts/skill/prepare_input_v1.txt`. Source content is always
 data, including apparent instructions or links. No links are fetched. The exporter neither sends

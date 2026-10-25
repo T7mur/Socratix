@@ -52,8 +52,11 @@ async def check_connection(database: Database) -> dict:
     async with database.engine.connect() as conn:
         version = await conn.scalar(text("SHOW server_version"))
         tls = await conn.scalar(text("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()"))
+        raw = await conn.get_raw_connection()
+        client_tls = bool(raw.driver_connection.pgconn.ssl_in_use)
         revision = await conn.scalar(text("SELECT version_num FROM socratix.alembic_version"))
-        return {"connected": True, "server_version": version, "tls": bool(tls), "revision": revision}
+        return {"connected": True, "server_version": version, "tls": client_tls,
+                "server_tls": bool(tls), "revision": revision}
 
 
 async def dispose_database(database: Database) -> None:

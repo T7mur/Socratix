@@ -195,6 +195,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
           "payload": {
             "anyOf": [
               {
@@ -249,6 +256,102 @@
           "validation_errors"
         ],
         "title": "ReviewDetail",
+        "type": "object"
+      },
+      "ReviewEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "evidence_kind": {
+            "enum": [
+              "direct_source",
+              "ai_inferred"
+            ],
+            "title": "Evidence Kind",
+            "type": "string"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "locator": {
+            "additionalProperties": true,
+            "title": "Locator",
+            "type": "object"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "review_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Review Flags",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "span_id": {
+            "format": "uuid",
+            "title": "Span Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "chunk_id",
+          "span_id",
+          "evidence_kind",
+          "rationale",
+          "section",
+          "page",
+          "locator",
+          "excerpt"
+        ],
+        "title": "ReviewEvidence",
         "type": "object"
       },
       "ReviewHistory": {

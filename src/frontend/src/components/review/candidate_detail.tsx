@@ -27,6 +27,24 @@ export function CandidateDetail({
       <h3 className="section-label">Candidate specification</h3>
       <pre>{JSON.stringify(detail.payload, null, 2)}</pre>
       <Provenance source={detail.source} />
+      {!!detail.evidence?.length && (
+        <section aria-label="Candidate evidence">
+          <h3 className="section-label">Evidence for this proposal</h3>
+          {detail.evidence.map((item) => (
+            <div key={`${item.run_id}:${item.chunk_id}:${item.span_id}`}>
+              <span className="badge">
+                {item.evidence_kind === "ai_inferred" ? "AI inferred · requires human judgement" : "Direct source"}
+              </span>
+              <p>{item.section}{item.page ? ` · page ${item.page}` : ""}</p>
+              {item.excerpt && <blockquote style={{ whiteSpace: "pre-wrap" }}>{item.excerpt}</blockquote>}
+              <p>{item.rationale}</p>
+              {!!item.review_flags?.length && <ul className="error">
+                {item.review_flags.map((flag, index) => <li key={index}>{flag}</li>)}
+              </ul>}
+            </div>
+          ))}
+        </section>
+      )}
       <h3 className="section-label">Deterministic checks</h3>
       {detail.validation_errors.length ? (
         <ul className="error">

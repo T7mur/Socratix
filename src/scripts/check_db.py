@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from _common import settings
+from _common import configure_event_loop, settings
 from app.db.session import check_connection, create_database, dispose_database
 
 
@@ -14,4 +14,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    configure_event_loop()
     asyncio.run(main())

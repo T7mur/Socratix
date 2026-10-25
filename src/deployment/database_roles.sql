@@ -16,6 +16,16 @@ GRANT INSERT, UPDATE ON socratix.skills, socratix.skill_relations, socratix.lear
 GRANT INSERT ON socratix.review_decisions, socratix.graph_versions, socratix.graph_members TO socratix_api;
 REVOKE UPDATE(role,is_active), DELETE ON socratix.users FROM socratix_api;
 
+-- Apply only AFTER reviewed migration 0006. Its own grants cover already-provisioned roles.
+DO $$ BEGIN
+ IF to_regclass('socratix.skill_import_runs') IS NOT NULL THEN
+  REVOKE ALL ON socratix.skill_import_runs FROM socratix_api;
+  REVOKE INSERT, UPDATE, DELETE ON socratix.skill_import_chunks, socratix.skill_candidate_evidence FROM socratix_api;
+  REVOKE DELETE ON socratix.skill_import_runs, socratix.skill_import_chunks FROM socratix_worker;
+  REVOKE UPDATE, DELETE ON socratix.skill_candidate_evidence FROM socratix_worker;
+ END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION socratix.enforce_student_registration() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF pg_has_role(current_user, 'socratix_api', 'member') AND NOT pg_has_role(current_user, 'socratix_worker', 'member')

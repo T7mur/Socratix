@@ -2,6 +2,28 @@
 
 These helpers are implemented. Search the named module with `rg` and read its contract before reuse. Owner F maintains infrastructure; Member A owns catalogue validation/review. Extend compatibly with affected-owner review. Do not move domain policy into a generic utility merely to eliminate similar-looking code.
 
+## Import bridge helpers — implemented draft, A/F review pending
+
+| Import path / owner | Inputs → outputs | Async, effects and errors | Example / tests |
+|---|---|---|---|
+| `app.modules.skill_generation.import_artifacts.load_artifacts` / A | directory, optional unit codes → `PreparedImport` | Sync reads/rebuilds artifacts, no writes/network. Safe domain ValidationError for inconsistent/unsupported evidence | `load_artifacts(Path('outputs/source'), ['AI-ML'])`; `test_skill_import.py` |
+| `app.modules.skill_generation.candidates.validate_batches` / A | request/batch pairs, approved graph → canonical resources with span evidence | Sync/pure. Uses canonical DTOs and existing graph validators; rejects unsupported references/IDs/cycles. No approval | Called once per complete unit; `test_skill_import.py` |
+| `app.modules.skill_generation.importer.import_configuration`, `extraction_prompt` / A | settings/permission/units → non-secret config; none → versioned prompt | Sync prompt reads/hash; no provider or DB writes | `import_prepared`; fingerprint tests |
+| `app.modules.skill_generation.importer.preflight` / A/F | database, actor, prepared input → none | Async read-only revision/admin/source/approved-context checks; ConflictError, ForbiddenError, ValidationError, SQL errors | CLI dry-run; disposable bridge tests |
+| `app.modules.skill_generation.importer.import_prepared` / A | database/gateway/settings/input/actor/permission, dry-run flag → report + exit code | Async orchestrator; manages short transactions and bounded gateway calls. Unit atomicity; no DB transaction during model calls. Safe failures in report; unavailable infrastructure can propagate to CLI | `import_skills.py`; orchestration + disposable bridge tests |
+| `app.modules.skill_generation.importer.write_report` / A | report, output root → report path | Sync atomic file replacement. No database/model calls. OSError on unavailable output | `write_report(report, Path('outputs/skill-imports'))`; report tests |
+| `app.db.repositories.skill_imports.import_lock` / F | engine, fingerprint → async lock context | Dedicated session advisory lock; no open transaction during body. ConflictError on concurrent run; DB errors propagate | `async with import_lock(engine, fingerprint)`; disposable concurrency test |
+| `app.db.repositories.skill_imports.SkillImportRepository` / F | caller session; actor/source/run/chunk/resource/evidence inputs → rows, reports, admin evidence | All methods async, caller-owned transactions; never commit. `require_admin`, `check_source`, `start`, `chunks`, `checkpoint`, `persist_unit`, `finish`, `report`, `evidence`. Writes only sources/spans/import ledger and delegates catalogue revisions to CatalogueRepository. Reports missing run with NotFoundError; conflicts/permission failures explicit. Evidence reads return empty on 0005 | `SkillImportRepository(session).report(run_id)`; disposable bridge tests |
+| `src/scripts/_common.configure_event_loop` / F | none → none | Sync Windows selector policy, no effect elsewhere; call before asyncio.run/uvicorn | check/seed/role/import/serve scripts; Windows operator smoke |
+
+`SkillImportRepository.validation_graph()` acquires the shared catalogue transaction lock before
+reading the graph for final unit validation, keeping concurrent approval and unit insertion consistent.
+
+Reuse decision: reuse the canonical review DTOs, checksums, target/settings/database lifecycle,
+catalogue transaction lock/revision repository and graph validators. Keep generation policy in A
+and persistence in F. Student activity generation jobs cannot represent curriculum import history.
+`check_connection` now reports client TLS as `tls` and separate pooler/backend `server_tls`.
+
 ## Backend
 
 Python imports start with `app`, not `src`. All async repository methods use a caller-supplied `AsyncSession`; none commits. Default errors are `ConflictError` (409), `ForbiddenError` (403), `NotFoundError` (404), `ValidationError` (422). SQL/provider failures are translated at the HTTP boundary without raw exception details.
