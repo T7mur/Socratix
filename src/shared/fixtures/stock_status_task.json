@@ -1,0 +1,56 @@
+{
+  "contract_version": "1.0",
+  "task_id": "00000000-0000-4000-8000-000000000100",
+  "task_version": 1,
+  "activity_type": "single_skill_exercise",
+  "title": "Stock classifier",
+  "target_skill_ids": [
+    "python.conditionals"
+  ],
+  "outcome_ids": [
+    "python.conditionals.transfer.v1"
+  ],
+  "assessment_stage": "transfer",
+  "language": "python",
+  "student_brief": "Classify nonnegative stock quantities: 0 sold_out, 1\u20133 low, 4+ available.",
+  "function_contract": {
+    "name": "stock_status",
+    "parameters": [
+      {
+        "name": "quantity",
+        "type": "int"
+      }
+    ],
+    "returns": "str"
+  },
+  "requirements": [
+    {
+      "requirement_id": "R1",
+      "description": "0 returns sold_out"
+    },
+    {
+      "requirement_id": "R2",
+      "description": "1\u20133 return low"
+    },
+    {
+      "requirement_id": "R3",
+      "description": "4+ return available"
+    }
+  ],
+  "input_constraints": [
+    "quantity is nonnegative"
+  ],
+  "public_examples": [
+    {
+      "args": [
+        3
+      ],
+      "expected": "low"
+    }
+  ],
+  "explanation_questions": [
+    "Why do 3 and 4 select different branches?"
+  ],
+  "verification_status": "verified",
+  "human_review_status": "not_required"
+}

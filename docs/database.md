@@ -1,4 +1,10 @@
-# Database — Aiven PostgreSQL schema and data integrity
+# Database — Supabase PostgreSQL schema and data integrity
+
+## Implemented branch proposal — 2026-10-25
+
+Supabase PostgreSQL replaces the previous Aiven baseline; Supabase Auth supplies identity. Application tables use the private `socratix` schema, accessed through FastAPI and restricted SQL roles. The **complete physical definition** is [database_dictionary.md](database_dictionary.md); [setup](database_setup.md), [implementation](database_implementation.md), and [ADR 0002](adr/0002-versioned-persistence.md) explain the executable changes. Earlier abbreviated tables/SQL below are conceptual sketches, not authoritative migration DDL.
+
+Catalogue candidates have immutable revisions and `approval_status`; accepted rows are projections. Activities additionally pin `graph_version`, and evaluation target columns enforce exact artifact/attempt foreign keys. APIs never run migrations at startup. Design acceptance and external smoke tests remain pending; this proposal supersedes conflicting sketch-level field names only when reviewed.
 
 **Owner:** Member F (Data/Integration) for migrations, roles, backup/configuration. Domain owners propose changes via reviewed migration requests. **Dependencies:** all backend components. **Contract:** [shared_contracts.md](shared_contracts.md) v1.0.
 
@@ -6,7 +12,7 @@
 
 The database records **what skills exist, where they came from, what a student attempted, what assistance was given, and what evidence justifies the current recommendation**. It is not a place to store arbitrary model confidence claims as ground truth.
 
-Use PostgreSQL on **Aiven**, SQLAlchemy 2.x and Alembic. Prefer normalised relational tables for durable records, with JSONB only for versioned model-generated specifications or provider-neutral diagnostic details. Use foreign keys, check constraints, unique indexes and immutable task/evidence versions; do not let agents write ad-hoc JSON directly into the production tables.
+Use PostgreSQL on **Supabase**, SQLAlchemy 2.x and Alembic. Prefer normalised relational tables for durable records, with JSONB only for versioned model-generated specifications or provider-neutral diagnostic details. Use foreign keys, check constraints, unique indexes and immutable task/evidence versions; do not let agents write ad-hoc JSON directly into the production tables.
 
 ## Entity groups and cardinalities
 
@@ -185,10 +191,10 @@ CREATE INDEX ix_reassess_due
 
 Implement indexes only after the matching tables exist. Add unique constraints for idempotency and tasks' content checksums, and row ownership filters for learner data. Evaluate later whether tenant isolation or PostgreSQL RLS is justified by institutional deployment.
 
-## Aiven / Render configuration
+## Supabase / Render configuration
 
-- Store `DATABASE_URL` in Render secrets, not the repository, not Vercel browser. Aiven PostgreSQL connections are TLS encrypted; prefer `sslmode=verify-full` and configure Aiven project CA certificate. If `verify-full` cannot be configured initially, document the temporary security exception instead of silently dropping TLS.
-- Pool connections per FastAPI process with bounded pool size; Render autoscaling must not exceed Aiven's connection limits. Avoid creating a new connection for every LLM token or grading step.
+- Store `DATABASE_URL` in Render secrets, not the repository, not Vercel browser. Accept standard `postgresql://` URLs; shared settings select psycopg and supply `sslmode=require` automatically. No local CA-file configuration is required. Server identity verification is not requested by this connection mode.
+- Pool connections per FastAPI process with bounded pool size; Render autoscaling must not exceed Supabase's connection limits. Avoid creating a new connection for every LLM token or grading step.
 - Migrate via one controlled CI/pre-deploy job (`alembic upgrade head`), not concurrent startup of all replicas.
 - Seed demo reference data with stable source IDs and clear separation of test/staging/production databases. Do not place real student records in preview or public demo deployments.
 - Backups/retention and deletion obligations need policies before real institutional data is collected. Encrypt data in transit; restrict DB user permissions; rotate credentials and audit privileged access.
@@ -211,7 +217,7 @@ Cross-module ownership is **logical**: application roles and transactions enforc
 ## Owned files
 
 ```text
-src/backend/app/db/{models,session,repositories}.py
+src/backend/app/db/{base.py,session.py,models/,repositories/}
 src/backend/migrations/{versions,env.py}
 src/backend/app/core/{config,security,logging}.py
 src/backend/app/api/v1/reviews.py
@@ -226,13 +232,13 @@ src/shared/fixtures/  # canonical synthetic fixtures; see shared_contracts.md
 - Invalid/uncertain tests excluded from mastery and gap updates; recomputation reverses invalid results.
 - Cross-student reads/writes blocked even with guessed IDs; instructor view limited to authorised courses.
 - Concurrent hint/retry and double submits produce idempotent event rows, not duplicate score updates.
-- Aiven TLS smoke test passes in staging; credentials never appear in source or public API.
+- Supabase TLS smoke test passes in staging; credentials never appear in source or public API.
 - Schema migrations upgrade cleanly and test downgrade/backup recovery; connection-pool limits respected.
 
 ## Sources
 
-- [Aiven PostgreSQL connection examples](https://aiven.io/docs/products/postgresql/howto/list-code-samples)
-- [Aiven certificate verification](https://aiven.io/docs/platform/concepts/tls-ssl-certificates)
+- [Supabase PostgreSQL connection examples](https://supabase.com/docs/guides/database/connecting-to-postgres)
+- [Supabase SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement)
 - [PostgreSQL recursive queries](https://www.postgresql.org/docs/current/queries-with.html)
 - [SQLAlchemy 2.x documentation](https://docs.sqlalchemy.org/en/20/)
 - [Alembic documentation](https://alembic.sqlalchemy.org/en/latest/)

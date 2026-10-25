@@ -1,5 +1,23 @@
 # Shared contracts — **AUTHORITATIVE v1.0**
 
+## Additive implemented proposal — identity and catalogue review
+
+Pending Member F/affected-owner review. `contract_version` remains `1.0`; existing decision request/response names are preserved. Canonical enum definitions live in `src/backend/app/contracts/enums.py`. The generated [OpenAPI snapshot](../src/shared/openapi/openapi.json) specifies all implemented DTO fields and query parameters; generate TypeScript rather than hand-copying them.
+
+| Method / route | Request and response | Authorisation |
+|---|---|---|
+| GET `/api/v1/me` | `UserProfile`: contract_version, id, email, display_name, role, is_active, created_at | Valid Supabase user, active local profile; first request idempotently creates a student |
+| GET `/api/v1/reviews` | optional resource_type/status/cursor, limit default 25/max 100 → `ReviewQueue` with items/next_cursor | Active application admin |
+| GET `/api/v1/reviews/{resource_type}/{id}` | required resource_version → `ReviewDetail`: queue metadata, canonical payload, safe source provenance, validation_errors | Active admin |
+| GET `/api/v1/reviews/{resource_type}/{id}/history` | → `ReviewHistory.items` of review_id, decision, decided_at, resource_version, reviewer_id, reason | Active admin |
+| POST `/api/v1/reviews/{resource_type}/{id}` | existing `{contract_version,resource_version,decision,reason}` → existing `{contract_version,review_id,decision,decided_at}` | Active admin; global catalogue only |
+
+`resource_type` is `skill | relation | outcome` for these implemented routes. Queue items have resource_type, resource_id, resource_version, approval_status, title and created_at. Default queue status means proposed/under_review. Cursor pagination is ordered by timestamp/type/id/version. Stale/repeated decisions are 409; missing resources 404; deterministic validation 422; unavailable database/key service 503. API permission checks are independent of Next.js route guards. A registration role or student_id is never trusted.
+
+Standalone outcome review payloads carry skill_id, assessment_stage, observable_action, success_criteria and source_refs; nested outcome/source objects accept the documented fields with default contract_version. Skill import outcomes must be submitted for separate human review, not silently approved with the parent. Source IDs remain persistence metadata, not student DTO fields. The sample's admin requirement supersedes instructor wording below only for implemented global catalogue review; course-scoped instructor review is deferred.
+
+All other routes listed in this document remain planned unless present in the generated OpenAPI. No activity/submission API or student grader integration is claimed by this change.
+
 **Owner:** Member F (Full-stack/Integration). **All members must read this first.** Changes to public DTOs/routes require a reviewed PR, updated Pydantic schemas, regenerated frontend types, and contract tests. No agent should privately change field names.
 
 ## 1. Vocabulary

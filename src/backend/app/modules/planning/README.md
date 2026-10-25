@@ -16,3 +16,5 @@ Map student-authored goals/reflections to approved candidate skills. Persist con
 Also owned: `src/backend/app/api/v1/plans.py`, `src/backend/app/api/v1/reflections.py`, `src/shared/prompts/planning/`, and `src/backend/tests/{unit,contract,integration}/planning/`.
 
 Test unknown model IDs, rejecting all tags, confirmation before selection, private reflections, consent, cross-student access and confidence-only reports. F owns auth primitives/schema; A owns curriculum proposals. Knowledge-gap logic consumes self-reports as weak evidence rather than independent mastery.
+
+Before implementing a task, read [shared helpers](../../../../../docs/shared_helpers.md), search existing functions and reuse compatible infrastructure. Update the catalogue in the same PR for new shared helpers; preserve domain ownership.

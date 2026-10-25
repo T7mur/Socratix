@@ -1,0 +1,24 @@
+{
+  "contract_version": "1.0",
+  "attempt_id": "00000000-0000-4000-8000-000000000300",
+  "task_id": "00000000-0000-4000-8000-000000000100",
+  "task_version": 1,
+  "grading_validity": "valid",
+  "test_summary": {
+    "passed": 3,
+    "total": 4
+  },
+  "failures": [
+    {
+      "requirement_id": "R2",
+      "test_id": "T4",
+      "input_repr": "3",
+      "expected_repr": "low",
+      "actual_repr": "available"
+    }
+  ],
+  "independent": false,
+  "max_hint_level_used": 2,
+  "solution_revealed": false,
+  "evidence_event_ids": []
+}

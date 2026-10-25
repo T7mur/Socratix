@@ -1,0 +1,13 @@
+{
+  "contract_version": "1.0",
+  "student_id": "00000000-0000-4000-8000-000000000001",
+  "skill_id": "python.conditionals",
+  "policy_version": "gap-v1",
+  "recall_index": 0.9,
+  "understanding_index": 0.65,
+  "transfer_index": 0.45,
+  "gap_priority_index": 0.71,
+  "confidence_label": "low",
+  "evidence_count": 3,
+  "hypotheses": []
+}

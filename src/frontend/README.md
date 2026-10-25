@@ -1,8 +1,10 @@
 # Frontend — Member F
 
+Implemented database/catalogue foundation: [setup](../../docs/database_setup.md), [Auth](../../docs/authentication.md), [handoff](../../docs/database_implementation.md), [shared helpers](../../docs/shared_helpers.md). Read the helper catalogue and search existing code before adding functions. The framework/dependency/migration and sample review entry points are executable; unimplemented domain components remain scaffolded.
+
 [Web specification and acceptance tests](../../docs/web_design.md) · [Source map](../README.md)
 
-This is the reserved Next.js + TypeScript application root. It has no package manifest or running pages yet. Backend domain owners supply APIs and fixtures; F owns frontend presentation and shared client wiring.
+This is the reserved Next.js + TypeScript application root. The authentication and catalogue review sample is implemented; the learning workspace remains planned. Backend domain owners supply APIs and fixtures; F owns frontend presentation and shared client wiring.
 
 | Directory | Put here |
 |---|---|

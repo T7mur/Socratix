@@ -1,0 +1,151 @@
+{
+  "contract_version": "1.0",
+  "graph_version": 1,
+  "skills": [
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.variables",
+      "name": "Variables",
+      "description": "Synthetic fixture for variables",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": []
+    },
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.comparisons",
+      "name": "Comparisons",
+      "description": "Synthetic fixture for comparisons",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": []
+    },
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.conditionals",
+      "name": "Conditionals",
+      "description": "Synthetic fixture for conditionals",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": [
+        {
+          "contract_version": "1.0",
+          "outcome_id": "python.conditionals.transfer.v1",
+          "skill_id": "python.conditionals",
+          "assessment_stage": "transfer",
+          "observable_action": "Apply conditionals to boundary cases",
+          "success_criteria": [
+            "Correct boundaries"
+          ],
+          "source_refs": [
+            {
+              "uri": "https://example.org/socratix/synthetic-python",
+              "section": "Synthetic test curriculum",
+              "page": null
+            }
+          ],
+          "approval_status": "approved"
+        }
+      ]
+    },
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.loops",
+      "name": "Loops",
+      "description": "Synthetic fixture for loops",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": []
+    },
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.lists",
+      "name": "Lists",
+      "description": "Synthetic fixture for lists",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": []
+    },
+    {
+      "contract_version": "1.0",
+      "skill_id": "python.functions",
+      "name": "Functions",
+      "description": "Synthetic fixture for functions",
+      "source_kind": "instructor",
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved",
+      "outcomes": []
+    }
+  ],
+  "relationships": [
+    {
+      "contract_version": "1.0",
+      "from_skill_id": "python.conditionals",
+      "to_skill_id": "python.comparisons",
+      "relation": "requires",
+      "approval_status": "approved",
+      "evidence_ref": "synthetic:human-review-fixture"
+    }
+  ],
+  "outcomes": [
+    {
+      "contract_version": "1.0",
+      "outcome_id": "python.conditionals.transfer.v1",
+      "skill_id": "python.conditionals",
+      "assessment_stage": "transfer",
+      "observable_action": "Apply conditionals to boundary cases",
+      "success_criteria": [
+        "Correct boundaries"
+      ],
+      "source_refs": [
+        {
+          "uri": "https://example.org/socratix/synthetic-python",
+          "section": "Synthetic test curriculum",
+          "page": null
+        }
+      ],
+      "approval_status": "approved"
+    }
+  ]
+}

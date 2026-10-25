@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class EvidenceRepositoryProtocol(Protocol):
+    async def append(self, event: dict) -> str: ...
+    async def list_for_skill(self, student_id: str, skill_id: str) -> list[dict]: ...

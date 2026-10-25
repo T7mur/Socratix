@@ -25,12 +25,20 @@
 - Skills, outcomes and prerequisite edges cannot enter the approved graph without an auditable human review. The LLM suggests, deterministic checks reject invalid IDs/cycles, and the reviewer approves.
 - Exercise/project specifications are **frozen before** private reference and test generation. Rejected generated content creates a new version; never mutate already-published task contracts or retroactively overwrite old grading evidence.
 - Run student code and model-generated reference code **only in isolated grading infrastructure**. The public FastAPI process may enqueue grading jobs but may not call untrusted `exec`, `eval`, `subprocess` or equivalent local execution paths.
-- Hidden tests, reference solutions, sandbox traces, ELM API keys and Aiven credentials never appear in student-facing DTOs, Next.js bundles or client logs.
+- Hidden tests, reference solutions, sandbox traces, ELM API keys and Supabase credentials never appear in student-facing DTOs, Next.js bundles or client logs.
 - The initial selector uses exactly `0.40 planning + 0.35 gap + 0.25 retention` **as a configurable, unvalidated heuristic**. Gaps use separate provisional thresholds; do not represent these as learned probabilities or optimal educational policies.
 - Record hint levels 1–4 and stage 4 answer reveal; subsequent success on the revealed original task does not count as independent mastery. Invalid/uncertain tests cannot change mastery.
 - Any real decision with academic consequences needs an authorised human and institutional policy; instructor review is required for unapproved curricula, uncertain generated tasks and disputed diagnoses.
 - ELM support is model/key-specific. Use `src/backend/app/integrations/elm.py`, configurable `ELM_BASE_URL`, and do not assume Responses API, constrained JSON, tool calls or streaming work without credentialed smoke tests.
 - Consent, retention and student-only authorisation are required before processing authentic learner profiles; self-reported confidence/reflections are weak evidence and remain private by default.
+
+## Shared helpers: discover before implementing
+
+Before adding a function, read [the shared-helper catalogue](docs/shared_helpers.md) and search the relevant implementation with `rg`. Reuse an existing helper when its semantics, ownership and permissions fit. Extend shared helpers compatibly with affected-owner review and tests for existing consumers. Keep domain behaviour in its owning module; never bypass a service boundary to reuse private code.
+
+Avoid duplicate configuration, database-session, authentication, HTTP, validation and transaction helpers. Do not introduce speculative abstractions or an unrelated `utils.py`. Backend executable helpers stay in the backend; frontend helpers stay in the frontend; `src/shared/` remains resources.
+
+Document new or changed shared functions in `docs/shared_helpers.md` in the same PR: import path, owner, purpose, inputs/outputs, async behaviour, side effects, errors, example and tests. Distinguish implemented helpers from proposed ones. Include a short reuse decision in the handoff.
 
 ## Source layout
 
@@ -58,15 +66,17 @@ You are on branch <INITIALS>/<feature_name>. You own COMPONENT: <component name>
 Read root README.md and AGENTS.md; then docs/architect.md, docs/shared_contracts.md and docs/<component>.md.
 Implement only the owned files and tests listed in your component spec.
 Respect all exact API and DTO names; use stubs/mocks at other members' boundaries.
+Read docs/shared_helpers.md and search existing code before adding helpers; reuse compatible functions and update the catalogue in the same PR.
 For any design deviation, update the owned MD and append a Proposed before → after entry to docs/changes/CHANGELOG.md. Update other impacted specs; create an ADR for major decisions. Before changing shared schema/migrations, obtain Member F and affected-owner review.
 Deliver: implemented functions/handlers, typed interfaces, local tests, negative/security tests, and a short handoff describing inputs/outputs and anything blocked.
-Do not claim external ELM or Aiven integration works unless you ran a real smoke test using authorised credentials.
+Do not claim external ELM or Supabase integration works unless you ran a real smoke test using authorised credentials.
 Never send reference solutions or hidden tests to student APIs.
 ```
 
 ## PR readiness checklist
 
 - [ ] I stayed within my code ownership boundary or obtained sign-off.
+- [ ] I searched the helper catalogue/code, reused compatible helpers and documented shared-function changes.
 - [ ] I used canonical DTOs and status enums; no duplicate field names/alternate IDs.
 - [ ] My prompts are versioned and model/provider-independent behind the shared ELM adapter.
 - [ ] All deterministic validators reject invalid data (not mere `assert` statements).

@@ -15,3 +15,5 @@ Consume immutable B/C task contracts and verified grading evidence. Produce stud
 Also owned: `src/backend/app/api/v1/{submissions,hints}.py`, `src/backend/app/integrations/grading.py`, `src/shared/prompts/hint/`, and `src/backend/tests/{unit,contract,integration}/hinting/`. E also owns the separate [grading worker](../../../../grading-worker/README.md).
 
 Test levels 1–4, explicit answer reveal, assistance persistence, unknown/invalid failures, correct code with no invented bug, prompt injection, private trace/test exclusion and authenticated ownership. Stage 4 sets `solution_revealed=true` and prevents independent mastery credit on that attempt. Execute code only through the isolated worker; F wires jobs and D derives gap estimates.
+
+Before implementing a task, read [shared helpers](../../../../../docs/shared_helpers.md), search existing functions and reuse compatible infrastructure. Update the catalogue in the same PR for new shared helpers; preserve domain ownership.

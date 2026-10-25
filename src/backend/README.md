@@ -1,10 +1,12 @@
 # Backend — Member F integration, A–E domain modules
 
-Read the [source map](../README.md) and [architecture](../../docs/architect.md). This is a directory scaffold for FastAPI, not a configured Python application.
+Implemented database/catalogue foundation: [setup](../../docs/database_setup.md), [Auth](../../docs/authentication.md), [handoff](../../docs/database_implementation.md), [shared helpers](../../docs/shared_helpers.md). Read the helper catalogue and search existing code before adding functions. The framework/dependency/migration and sample review entry points are executable; unimplemented domain components remain scaffolded.
+
+Read the [source map](../README.md) and [architecture](../../docs/architect.md). The database/review FastAPI application is configured; domain algorithms remain separate integrations.
 
 | Location | Responsibility | Owner |
 |---|---|---|
-| `app/main.py` (planned) | App creation, dependency composition and router registration | F |
+| `app/main.py` | App creation, dependency composition and router registration | F |
 | `app/api/v1/` | Thin authenticated HTTP handlers, one owner per file | See [API ownership](../README.md#api-file-ownership) |
 | `app/contracts/` | Canonical Pydantic DTOs, enums and boundary protocols | F, with affected-owner review |
 | `app/core/` | Configuration, security, errors and logging | F |
@@ -20,4 +22,4 @@ Read [shared contracts](../../docs/shared_contracts.md) before adding interfaces
 
 Workers delegate generation, assessment orchestration and evidence updates to the owning domain services. All execution of student and generated reference code goes through the separate grading worker. Long model calls belong in background jobs, not public request handlers.
 
-F will add the Python manifest, package initialisation, entry points and test configuration with the first implemented vertical slice. Shared files are edited through F so separate feature branches can focus on their own folders.
+The database/review slice includes the Python manifest, package initialisation, entry points and test configuration. Shared files are edited through F so separate feature branches can focus on their own folders.

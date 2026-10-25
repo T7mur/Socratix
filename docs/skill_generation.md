@@ -1,10 +1,14 @@
 # Skill generation — CS2023 → approved skills, outcomes and relationships
 
+## Implemented persistence/review subset — Proposed
+
+`reviewer.py`, `relation_validator.py` and `repository.py` now connect to F's reviewed persistence adapters. Candidate payloads and source IDs are stored in immutable numbered revisions; admin decisions validate permitted provenance and endpoints/cycles atomically, then publish exact graph snapshots. Pending edits preserve accepted records. Extraction, parsing, normalisation and LLM prompts remain owned future work. Discover reusable functions in [shared_helpers.md](shared_helpers.md).
+
 **Owner:** Member A (Curriculum/Graph) • **Dependencies:** Member F DB/LLM adapter • **Consumers:** D Selector, B Exercise, C Project, E Tutor • **Contract:** [shared_contracts.md](shared_contracts.md) v1.0
 
 ## Objective / definition of done
 
-Turn permissible CS2023 curricular source material into a **source-traceable and instructor-approved catalogue** of knowledge areas, units, topics, atomic skills, observable learning outcomes, and directed relationships stored in Aiven PostgreSQL. Do not conflate the CS2023 *hierarchy* with a prerequisite tree. Deterministic validation must catch invalid IDs, duplicated nodes, cycles and unsupported source locators.
+Turn permissible CS2023 curricular source material into a **source-traceable and instructor-approved catalogue** of knowledge areas, units, topics, atomic skills, observable learning outcomes, and directed relationships stored in Supabase PostgreSQL. Do not conflate the CS2023 *hierarchy* with a prerequisite tree. Deterministic validation must catch invalid IDs, duplicated nodes, cycles and unsupported source locators.
 
 ## Inputs and outputs
 

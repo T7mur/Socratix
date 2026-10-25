@@ -1,0 +1,46 @@
+name: Database and review checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install uv
+      - run: uv sync --project src/backend --frozen
+      - run: uv run --project src/backend ruff check src/backend/app src/backend/tests src/scripts
+      - run: uv run --project src/backend pytest src/backend/tests -q
+      - run: uv run --project src/backend alembic -c src/backend/alembic.ini upgrade head --sql > /tmp/socratix-upgrade.sql
+      - run: uv run --project src/backend python src/scripts/export_openapi.py
+      - run: uv run --project src/backend python src/scripts/generate_schema_docs.py
+      - run: uv run --project src/backend python src/scripts/check_documentation.py
+      - run: git diff --exit-code -- src/shared/openapi/openapi.json docs/database_dictionary.md
+  frontend:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run generate:types
+      - run: git diff --exit-code -- src/types/generated/api.ts
+      - run: npm test
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

@@ -17,3 +17,5 @@ Consume `GenerationBrief` and approved learning/engineering outcomes. Produce `P
 Also owned: `src/backend/app/api/v1/projects.py`, `src/shared/prompts/project/`, and `src/backend/tests/{unit,contract,integration}/project_generation/`.
 
 Test milestone cycles/missing IDs, alternative valid designs, review-required rubrics, stateful invariants, regression after change requests, private artifacts and authenticated ownership. Coordinate the student-safe activities reader with B/F; E executes code, and F owns schema/migrations. A project is not an exercise with a larger prompt.
+
+Before implementing a task, read [shared helpers](../../../../../docs/shared_helpers.md), search existing functions and reuse compatible infrastructure. Update the catalogue in the same PR for new shared helpers; preserve domain ownership.

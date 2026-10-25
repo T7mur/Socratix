@@ -1,6 +1,8 @@
 # Source map
 
-Start with [the team assignments](../README.md), [architecture](../docs/architect.md), and [shared contracts](../docs/shared_contracts.md). This tree organises the planned implementation; it does not contain a running application yet. README files explain responsibilities; `.gitkeep` files preserve empty directories in Git and can be removed when real files arrive.
+Implemented database/catalogue foundation: [setup](../docs/database_setup.md), [Auth](../docs/authentication.md), [handoff](../docs/database_implementation.md), [shared helpers](../docs/shared_helpers.md). Read the helper catalogue and search existing code before adding functions. The framework/dependency/migration and sample review entry points are executable; unimplemented domain components remain scaffolded.
+
+Start with [the team assignments](../README.md), [architecture](../docs/architect.md), and [shared contracts](../docs/shared_contracts.md). This tree contains the database/review foundation alongside planned domain components. README files explain responsibilities; `.gitkeep` files preserve empty directories in Git and can be removed when real files arrive.
 
 ## Find your component
 
@@ -73,7 +75,7 @@ src/
 
 ### API file ownership
 
-Paths below are relative to `src/backend/app/api/v1/`. These are planned files, not implemented endpoints. Exact routes remain defined in the shared contracts.
+Paths below are relative to `src/backend/app/api/v1/`. The identity/review route subset is implemented; remaining domain routes are planned. Exact routes remain defined in the shared contracts.
 
 | Owner | Route files |
 |---|---|

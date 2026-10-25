@@ -1,12 +1,16 @@
 # `architect.md` — Socratix architecture & integration specification
 
+## Implemented integration proposal — 2026-10-25
+
+The user selected Supabase for **PostgreSQL and Auth**. See [ADR 0001](adr/0001-supabase-auth.md), [setup](database_setup.md) and [authentication](authentication.md). SQLAlchemy/Alembic access a private, non-Data-API `socratix` schema; the browser uses Supabase only for Auth. Global catalogue review is admin-only in this sample. Use `uvicorn app.main:create_configured_app --factory` for configured startup. Other component algorithms and isolated grading are not implemented by this foundation. Review status: Proposed.
+
 **Owner / approver:** Member F (Full-stack & Integration). **Contract:** [shared_contracts.md](shared_contracts.md) v1.0. **Status:** proposed for MVP. Changes to system boundaries need owner approval from all impacted components.
 
 ## Mission and scope
 
 Socratix helps Informatics students become **independent problem solvers** through diagnostic recall → understanding → transfer, verified personalised exercises and projects, four-stage Socratic assistance, reflective planning, and delayed unaided reassessment. Optimize for subsequent unassisted performance, **not** for number of tasks solved with AI.
 
-**Included MVP:** CS2023-inspired skill graph with human approval; student-selected planning tags; proposed 40/35/25 selection heuristic; single- and multi-skill Python exercises; milestone-based Python projects; isolated grading; adaptive four-level hints; evidence-based gap estimates; manual review; Next.js frontend; FastAPI + ELM; Aiven PostgreSQL.
+**Included MVP:** CS2023-inspired skill graph with human approval; student-selected planning tags; proposed 40/35/25 selection heuristic; single- and multi-skill Python exercises; milestone-based Python projects; isolated grading; adaptive four-level hints; evidence-based gap estimates; manual review; Next.js frontend; FastAPI + ELM; Supabase PostgreSQL.
 
 **Excluded MVP:** institutional gradebook sync, unrestricted course PDF scraping, automatic high-stakes grading, unreviewed skill publication, model fine-tuning or reinforcement learning, unfettered execution of arbitrary user code on Render API hosts.
 
@@ -60,7 +64,7 @@ flowchart TD
 | Web | Next.js App Router, TypeScript | Vercel; no ELM keys, grading references or DB credentials in browser. |
 | API | FastAPI, Pydantic, SQLAlchemy, Alembic | Render public web service; auth, CORS, task orchestration, review endpoints. |
 | Model integration | `src/backend/app/integrations/elm.py` | Server-side OpenAI Python SDK pattern with **configurable ELM base URL/model**; no model-specific code elsewhere. |
-| Database | PostgreSQL | Aiven; TLS, connection pooling, versioned migrations. |
+| Database | PostgreSQL | Supabase; TLS, connection pooling, versioned migrations. |
 | Long-running jobs | Job table + dedicated worker, broker as needed | Render background worker, separate from public API. Avoid jobs tied to a short web request. |
 | Code checking | **Sandbox worker** with subprocess/container isolation | Separate constrained infrastructure; no raw `exec` in API, no network by default, resource limits, unprivileged process, no secrets. Validate hosted sandbox feasibility and security before enabling student execution. |
 | Artifact storage | Database metadata + private object storage if needed | No hidden tests/solutions in public assets. Define storage provider before large files. |
@@ -71,7 +75,7 @@ The [University ELM Python examples](https://information-services.ed.ac.uk/compu
 
 Member F must implement a credentialed smoke test: (1) resolve model IDs or call `/models` if supported, (2) test chat completion, (3) request JSON and validate, (4) test streaming only if needed, (5) check rate limits/usage/timeout/error structure, (6) check whether structured response formats are accepted, (7) record **actual supported endpoints and permissions** in an integration ADR. Do not invent `ELM_API_URL` or assume ELM supports OpenAI Responses API or tool calling.
 
-Suggested environment names (application-owned, not provider facts): `ELM_API_KEY`, `ELM_BASE_URL`, `ELM_MODEL_GENERATION`, `ELM_MODEL_REVIEW`, `DATABASE_URL`, `DATABASE_CA_CERT_PATH`, `WEB_ORIGIN`, `JOB_QUEUE_URL`, `JWT_ISSUER`, `JWT_AUDIENCE`, `SANDBOX_SERVICE_URL`, `GENERATION_MAX_RETRIES`. Configure via Render/Vercel secrets; never commit values.
+Suggested environment names (application-owned, not provider facts): `ELM_API_KEY`, `ELM_BASE_URL`, `ELM_MODEL_GENERATION`, `ELM_MODEL_REVIEW`, `DATABASE_URL`, `WEB_ORIGIN`, `JOB_QUEUE_URL`, `JWT_ISSUER`, `JWT_AUDIENCE`, `SANDBOX_SERVICE_URL`, `GENERATION_MAX_RETRIES`. Configure via Render/Vercel secrets; never commit values. Database URLs use `sslmode=require` for encrypted connections without a local CA-file requirement.
 
 ## Primary flows and integration contracts
 
@@ -161,7 +165,7 @@ Socratix/
 
 Each backend test tier has one directory per component plus `infrastructure/` for F's shared checks. Prompts are partitioned by owner under `src/shared/prompts/`. The component specifications list planned implementation file names; these files are added incrementally, not as empty generic functions.
 
-Set deployment roots to `src/frontend`, `src/backend` and `src/grading-worker` respectively. The backend generation worker and the isolated grading worker remain different processes and trust boundaries. Shared development resources must not be copied into browser assets. Dependency manifests, entry points, migrations, generated schemas and deployment provisioning are not implemented by this scaffold.
+Set deployment roots to `src/frontend`, `src/backend` and `src/grading-worker` respectively. The backend generation worker and the isolated grading worker remain different processes and trust boundaries. Shared development resources must not be copied into browser assets. Database/review manifests, entry points, migrations and generated contracts are implemented; worker dispatch, grading infrastructure and deployment provisioning remain separate work.
 
 ## Integration and deployment checklist
 
@@ -169,7 +173,7 @@ Set deployment roots to `src/frontend`, `src/backend` and `src/grading-worker` r
 - [ ] Approve exact CS2023 extracts/rights and canonical concept IDs.
 - [ ] FastAPI OpenAPI is source of truth; generate TS client; CI rejects contract drift.
 - [ ] Implement auth + per-student ACLs; roles `student`, `instructor`, `admin`.
-- [ ] Set up Aiven PostgreSQL with TLS certificate verification if feasible; Alembic migrations run once during deploy, not on each web worker start.
+- [ ] Set up Supabase PostgreSQL using the standard `postgresql://` URL; shared settings select psycopg and require TLS automatically. Alembic migrations run once during deploy, not on each web worker start.
 - [ ] Render API binds `0.0.0.0:$PORT`, has `/healthz`, locked CORS for Vercel frontend.
 - [ ] Configure worker job timeouts/idempotency; no grading or large LLM jobs in API request thread.
 - [ ] Isolated grading worker has no application DB admin credentials/ELM key, no outbound network by default, CPU/memory/filesystem/process/time limits.
@@ -189,7 +193,7 @@ Set deployment roots to `src/frontend`, `src/backend` and `src/grading-worker` r
 - [Edinburgh ELM developer example](https://information-services.ed.ac.uk/computing/elm/elm-competence-centre/examples-of-how-to-use-elm-with-python-and-elm-api-key/interacting-with-elm-using-python-and-the-elm-api)
 - [Render web service deployment](https://render.com/docs/web-services)
 - [Render background workers](https://render.com/docs/background-workers)
-- [Aiven TLS and certificate verification](https://aiven.io/docs/platform/concepts/tls-ssl-certificates)
+- [Supabase SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement)
 - [Next.js deployment](https://nextjs.org/docs/app/getting-started/deploying)
 
 ## Design-change governance (mandatory for the component owner and coding agents)

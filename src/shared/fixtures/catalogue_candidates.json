@@ -1,0 +1,9 @@
+{
+  "source": {"uri":"https://example.org/socratix/synthetic-python", "source_kind":"instructor", "section":"Synthetic test curriculum", "rights_status":"permitted"},
+  "candidates": [
+    {"resource_type":"skill", "resource_id":"python.comparisons", "payload":{"contract_version":"1.0","skill_id":"python.comparisons","name":"Comparisons","description":"Compare Python values using explicit conditions.","source_kind":"instructor","source_refs":[{"uri":"https://example.org/socratix/synthetic-python","section":"Synthetic test curriculum","page":null}],"approval_status":"proposed","outcomes":[]}},
+    {"resource_type":"skill", "resource_id":"python.conditionals", "payload":{"contract_version":"1.0","skill_id":"python.conditionals","name":"Conditionals","description":"Select a branch using a Boolean condition.","source_kind":"instructor","source_refs":[{"uri":"https://example.org/socratix/synthetic-python","section":"Synthetic test curriculum","page":null}],"approval_status":"proposed","outcomes":[]}},
+    {"resource_type":"relation", "resource_id":"00000000-0000-4000-8000-000000000030", "payload":{"contract_version":"1.0","from_skill_id":"python.conditionals","to_skill_id":"python.comparisons","relation":"requires","approval_status":"proposed","evidence_ref":"synthetic:prerequisite-proposal"}},
+    {"resource_type":"outcome", "resource_id":"python.conditionals.transfer.v1", "payload":{"contract_version":"1.0","outcome_id":"python.conditionals.transfer.v1","skill_id":"python.conditionals","assessment_stage":"transfer","observable_action":"Apply conditional branching to new boundary cases.","success_criteria":["Correct handling of the stated boundaries"],"source_refs":[{"uri":"https://example.org/socratix/synthetic-python","section":"Synthetic test curriculum","page":null}],"approval_status":"proposed"}}
+  ]
+}

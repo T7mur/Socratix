@@ -1,0 +1,6 @@
+{
+  "contract_version": "1.0",
+  "grading_validity": "invalid",
+  "reason": "Synthetic incorrect expectation contradicts the frozen boundary requirements",
+  "must_update_mastery": false
+}

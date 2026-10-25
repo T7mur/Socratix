@@ -1,10 +1,12 @@
 # Socratix — Team Development Handbook
 
+The database and catalogue-review foundation now has executable backend/frontend entry points, pending team review. Start with [setup](docs/database_setup.md), [authentication](docs/authentication.md), [implementation/verification](docs/database_implementation.md), and [shared helpers](docs/shared_helpers.md). Remaining tutor/domain integrations are still proposed or scaffolded.
+
 > **Mission:** Help Informatics students become independent problem-solvers through curriculum-aligned skills, verified exercises/projects, evidence-grounded four-stage hints, and independent reassessment. This repository's documents are a **proposed implementation contract**, not completed application code.
 
 **Everyone starts here.** Do not ask your coding agent to build an entire product from the diagram. Assign one owned feature with a precise contract, mock its dependencies, run tests and open a reviewed pull request.
 
-The [source map and folder ownership guide](src/README.md) shows the scaffold under `src/`, with component guides and separate test/prompt directories. Start there to find where your code belongs. Application services and external integrations are not implemented by this scaffold.
+The [source map and folder ownership guide](src/README.md) shows the implementation under `src/`, with component guides and separate test/prompt directories. Database/catalogue services are implemented; remaining domain services and external deployments require their own integration work.
 
 ## 1. Team responsibilities and where to read
 
@@ -82,6 +84,8 @@ Read root README.md, AGENTS.md, docs/architect.md, docs/shared_contracts.md,
 and docs/<owned_component>.md before modifying code.
 Implement only <owned paths> and tests; use mocks at unfinished dependencies.
 Use exactly the canonical API/DTO names and status transitions.
+Read docs/shared_helpers.md and search for reusable functions before adding code;
+update the catalogue in the same PR and explain reuse decisions in the handoff.
 If the existing design needs to change: DO NOT silently change code.
 Propose a before → after entry in docs/changes/CHANGELOG.md; update the
 corresponding component MD, shared contracts/architecture if affected;
@@ -97,7 +101,7 @@ For **Member A**, e.g., set the goal to “extract candidate skill IDs + source 
 
 ## 6. Stack and safety
 
-- **Next.js + TypeScript → Vercel**; **FastAPI → Render**; **Aiven PostgreSQL → SQLAlchemy/Alembic**; **University ELM API** through the shared server-side client.
+- **Next.js + TypeScript → Vercel**; **FastAPI → Render**; **Supabase PostgreSQL → SQLAlchemy/Alembic**; **University ELM API** through the shared server-side client.
 - The ELM endpoint/model capabilities need authenticated verification; do not assume OpenAI SDK features are all supported.
 - Student and generated code runs only in isolated grading infrastructure, not the FastAPI process. Private tests/solutions must never be returned to the browser.
 - The initial selector uses **40% planning, 35% gaps, 25% retention** (configurable, unvalidated). Gap estimates and student confidence are provisional; manual review is required where specified. RL is future research, not initial implementation.
@@ -112,3 +116,9 @@ For **Member A**, e.g., set the goal to “extract candidate skill IDs + source 
 - [ ] CI/tests pass, demo/verification evidence and caveats included.
 
 For detailed ownership and implementation requirements consult the component docs; the root `AGENTS.md` also enforces this workflow.
+
+
+https://openrouter.ai/models?max_price=0&output_modalities=text
+https://docs.api.nvidia.com/nim/reference/llm-apis
+https://elm.edina.ac.uk/swagger-ui/index.html
+https://information-services.ed.ac.uk/computing/elm/elm_competence_centre/elm-models-available-through-the-api

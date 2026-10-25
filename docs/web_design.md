@@ -1,12 +1,16 @@
 # Web design — Next.js learning workspace
 
+## Implemented sample — Proposed
+
+The sample provides `/register`, `/login`, `/forgot-password`, `/reset-password`, `/auth/callback`, `/account` and admin-only `/review`. Supabase handles confirmation/recovery; Next.js 16 SSR cookies/proxy refresh and FastAPI token/role checks protect review. The queue supports skills, relationships and outcomes, with source checks, required decision reasons, history and stale-version recovery. Student/workspace learning routes below remain planned. See [authentication](authentication.md), [setup](database_setup.md) and [shared helpers](shared_helpers.md).
+
 **Owner:** Member F (Frontend & Integration). **Dependencies:** Member A skills, B exercises, C projects, D plans/selector/gaps, E hinting/verification; **contract:** [shared_contracts.md](shared_contracts.md) v1.0.
 
 ## Product goal
 
 Give an Informatics student a workspace where they can choose what to study, inspect **why** an AI recommendation exists, independently solve exercises and design/build projects, request progressively more revealing hints, and understand what evidence backs their learning profile. The interface should make independent effort easier than outsourcing the task to a chatbot.
 
-Use **Next.js App Router + TypeScript**, deployed on **Vercel**. Backend is **FastAPI on Render**; no frontend code directly contacts ELM or Aiven PostgreSQL. ELM credentials and hidden grader artifacts are never part of the browser bundle. Use an application authentication mechanism selected by Member F with backend token verification and role-based access. Avoid inventing a final auth vendor until chosen.
+Use **Next.js App Router + TypeScript**, deployed on **Vercel**. Backend is **FastAPI on Render**; no frontend code directly contacts ELM or Supabase PostgreSQL. ELM credentials and hidden grader artifacts are never part of the browser bundle. Use an application authentication mechanism selected by Member F with backend token verification and role-based access. Avoid inventing a final auth vendor until chosen.
 
 ## Page map and user journeys
 

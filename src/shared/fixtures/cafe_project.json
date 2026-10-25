@@ -1,0 +1,52 @@
+{
+  "contract_version": "1.0",
+  "project_id": "00000000-0000-4000-8000-000000000200",
+  "project_version": 1,
+  "title": "Synthetic cafe ordering project",
+  "target_skill_ids": [
+    "python.loops",
+    "python.conditionals"
+  ],
+  "engineering_outcome_ids": [],
+  "student_brief": "Build a terminal ordering system with a planned cancellation milestone.",
+  "milestones": [
+    {
+      "milestone_id": "M1",
+      "title": "Requirements",
+      "depends_on": [],
+      "assessment_method": "rubric",
+      "requirement_ids": [
+        "PR1"
+      ],
+      "public_rubric": [
+        {
+          "criterion": "Explain expected behaviour"
+        }
+      ]
+    },
+    {
+      "milestone_id": "M2",
+      "title": "Ordering",
+      "depends_on": [
+        "M1"
+      ],
+      "assessment_method": "tests",
+      "requirement_ids": [
+        "PR2"
+      ]
+    },
+    {
+      "milestone_id": "M3",
+      "title": "Change request: cancellation",
+      "depends_on": [
+        "M2"
+      ],
+      "assessment_method": "mixed",
+      "requirement_ids": [
+        "PR3"
+      ]
+    }
+  ],
+  "verification_status": "verified",
+  "human_review_status": "pending"
+}
