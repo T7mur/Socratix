@@ -106,65 +106,181 @@ window.SAMPLE = {
   ],
 
   recent: [
-    { title: "Stock classifier", activity: "single_skill_exercise", stage: "transfer", skills: ["python.conditionals"], result: "3 / 4 tests", status: "fail", help: "Hint level 2", independent: false, when: "Today 10:42", href: "#/learn/stock-status" },
+    { title: "List total", activity: "single_skill_exercise", stage: "transfer", skills: ["python.loops", "python.lists"], result: "In progress", status: "neutral", help: "None", independent: null, when: "Today 10:42", href: "#/practice/list-total" },
     { title: "Campus Café Terminal · M3", activity: "project", stage: "transfer", skills: ["python.input_validation", "python.loops"], result: "In progress", status: "neutral", help: "None", independent: null, when: "Yesterday", href: "#/projects/cafe-terminal" },
     { title: "Loop recall check", activity: "single_skill_exercise", stage: "recall", skills: ["python.loops"], result: "Rubric met", status: "pass", help: "None", independent: true, when: "Thu 23 Oct", href: "#/skills" },
     { title: "Predict the output: comparisons", activity: "single_skill_exercise", stage: "understanding", skills: ["python.comparisons"], result: "Rubric met", status: "pass", help: "Hint level 1", independent: false, when: "Wed 22 Oct", href: "#/skills" },
   ],
 
-  // Student-safe TaskSpec
-  task: {
-    task_id: "stock-status", task_version: 1,
-    activity_type: "single_skill_exercise", title: "Stock classifier",
-    target_skill_ids: ["python.conditionals"], outcome_ids: ["python.conditionals.transfer.v1"],
-    assessment_stage: "transfer", language: "python",
-    student_brief: "A café till needs to label each item's stock level so staff know what to reorder. Classify stock quantities using the specified boundaries.",
-    function_contract: { name: "stock_status", parameters: [{ name: "quantity", type: "int" }], returns: "str" },
-    requirements: [
-      { requirement_id: "R1", description: "0 returns \"sold_out\"" },
-      { requirement_id: "R2", description: "1–3 return \"low\"" },
-      { requirement_id: "R3", description: "4 or more return \"available\"" },
+  // ---------- Practice (practice_spec.md v1 + practice_ui_structure.md v1.0) ----------
+  // Student-safe fields only: id, type, concept_ids, statement, starter, visible_checks, hints{H0,H1,H3}, last_step, source.
+  // Solutions, hidden-check generators and rubrics are server-only (see SERVER in practice.js, simulated).
+  practice: {
+    config: { STUCK_UNLOCK_MIN: 5, GLOW_SAME_FAILURE: 3, GLOW_MIN: 10, H4_HIGHLIGHT_AFTER: 2, HIDDEN_CHECKS_PER_HOUR: 10, SPACING_DAYS: [2, 7, 21], MIXED_MIN_CONCEPTS: 2, MIXED_MAX_ITEMS: 3, UPLOADS_PER_DAY: 3, N_SESSIONS: 3 },
+    planTask: { id: "t-loops", title: "Practise loops & lists (30 min)" },
+    subjects: [
+      { id: "python", name: "Python", note: "Main practice language" },
+      { id: "la", name: "Linear Algebra 1" },
+      { id: "logic", name: "Propositional logic", note: "Inf1A" },
+      { id: "haskell", name: "Haskell", note: "Inf1A · second language" },
     ],
-    input_constraints: ["quantity is a nonnegative integer"],
-    public_examples: [{ args: [3], expected: "low" }, { args: [0], expected: "sold_out" }],
-    explanation_questions: ["Why is the result for 3 different from 4?"],
-    verification_status: "verified", human_review_status: "not_required",
-    stages: [
-      { stage: "recall", label: "Recall", detail: "Retrieval question", grading: "rubric", state: "done" },
-      { stage: "understanding", label: "Understanding", detail: "Predict & explain", grading: "rubric", state: "done" },
-      { stage: "transfer", label: "Transfer", detail: "Code + explanation", grading: "auto-tested", state: "current" },
+    items: [
+      {
+        id: "list-total", type: "code", language: "python", subject: "python", concept: "Loops & lists", concept_ids: ["python.loops", "python.lists"],
+        title: "List total", status: "in_progress", minutes: 10, source: "bank",
+        statement: "Write `list_total(nums)` that returns the sum of every number in the list `nums`. An empty list sums to 0.",
+        signature: "def list_total(nums: list[int]) -> int",
+        starter: "def list_total(nums):\n    total = 0\n    for n in nums:\n        if n > 0:\n            total += n\n    return total\n",
+        visible_checks: [{ input: "[1, 2, 3]", expected: "6" }, { input: "[]", expected: "0" }, { input: "[5]", expected: "5" }],
+        hints: {
+          H0: "Look at the failing case: a list that contains negative numbers. Follow what happens to `total` when `n` is negative.",
+          H1: "The idea: an `if` inside a loop filters which items are used. A sum should use every item. Which items does your loop let through? (Course notes: Loops, “accumulating a result”.)",
+          H3: { text: "Similar problem: count every word in a list, whatever it is.", code: "def count_words(words):\n    count = 0\n    for w in words:\n        count += 1   # every item counts, no filter\n    return count" },
+        },
+        last_step: { kind: "parsons", label: "Parsons: put the lines in order", lines: ["def list_total(nums):", "    total = 0", "    for n in nums:", "        total += n", "    return total"], decoys: ["        if n > 0:", "    return n"], start: [2, "d0", 0, 4, 3, 1, "d1"] },
+        tip: "Strategy: test the edges first. Before you run, try an empty list, one item, and only negative numbers.",
+        quick: "list-product",
+      },
+      {
+        id: "digit-sum", type: "code", language: "python", subject: "python", concept: "Functions & recursion", concept_ids: ["python.functions", "python.recursion"],
+        title: "Digit sum (recursion)", status: "solved_on_own", minutes: 12, source: "bank",
+        statement: "Write a recursive `digit_sum(n)` that returns the sum of the digits of a non-negative integer `n`. Don't convert `n` to a string.",
+        signature: "def digit_sum(n: int) -> int",
+        starter: "def digit_sum(n):\n    if n < 10:\n        return n\n    return n % 10 + digit_sum(n // 10)\n",
+        visible_checks: [{ input: "0", expected: "0" }, { input: "7", expected: "7" }, { input: "1234", expected: "10" }],
+        hints: {
+          H0: "Look at the failing case and the base case: what should happen for a single digit?",
+          H1: "The idea: a recursive function needs a base case that stops, and a step that makes the problem smaller (`n // 10`).",
+          H3: { text: "Similar problem: count the digits of n.", code: "def count_digits(n):\n    if n < 10:\n        return 1\n    return 1 + count_digits(n // 10)" },
+        },
+        last_step: { kind: "parsons", label: "Parsons: put the lines in order", lines: ["def digit_sum(n):", "    if n < 10:", "        return n", "    return n % 10 + digit_sum(n // 10)"], decoys: ["    return digit_sum(n)"], start: [1, "d0", 3, 0, 2] },
+        tip: "Strategy: trace a small call by hand (digit_sum(12)) and write each call on its own line.",
+        quick: "count-digits",
+      },
+      {
+        id: "la-det", type: "worked_steps", subject: "la", concept: "Determinants", concept_ids: ["la.determinant_2x2"],
+        title: "Determinant of a 2×2 matrix", status: "solved_with_hints", minutes: 8, source: "bank",
+        statement: "Find det(A) for A = [[2, 1], [4, 3]]. Write one step per line; each line must equal the one before.",
+        start_label: "det(A) =",
+        starter: ["2*3 - 1*4", "6 - 4", "2"],
+        visible_checks: [],
+        hints: {
+          H0: "Look at the first step that isn't equal to the line before it.",
+          H1: "The idea: for [[a, b], [c, d]], det = a·d − b·c. Check which entries you multiply and the sign between them.",
+          H3: { text: "Similar problem: B = [[1, 2], [3, 5]].", code: "det(B) = 1·5 − 2·3\n       = 5 − 6\n       = −1" },
+        },
+        last_step: { kind: "faded", label: "Faded example: fill in the blanks", steps: [{ pre: "det(A) = 2·3 − ", answer: "1", post: "·4" }, { pre: "       = 6 − ", answer: "4", post: "" }, { pre: "       = ", answer: "2", post: "" }] },
+        tip: "Strategy: write the formula first, then substitute. Keep one operation per step.",
+      },
+      {
+        id: "la-explain", type: "explanation", subject: "la", concept: "Determinants", concept_ids: ["la.determinant_properties"],
+        title: "Why a zero row gives det 0", status: "new", minutes: 5, source: "bank",
+        statement: "In one or two sentences: why is the determinant of a square matrix with a row of zeros equal to 0?",
+        starter: "",
+        hints: {
+          H0: "Look at what the determinant expansion does with each entry of that zero row.",
+          H1: "The idea: expand along the zero row (cofactor expansion). Every term has one entry from that row.",
+          H3: { text: "Similar reasoning: why is det 0 when two rows are equal? Swapping them changes the sign but not the matrix, so det = −det.", code: "" },
+        },
+        last_step: null,
+        tip: "Strategy: explain with one concrete example, then say why it always works.",
+      },
+      {
+        id: "logic-equiv", type: "formula", subject: "logic", concept: "Equivalences", concept_ids: ["logic.de_morgan"],
+        title: "¬(p ∧ q) without ∧", status: "solved_on_own", minutes: 6, source: "bank",
+        statement: "Write a formula equivalent to ¬(p ∧ q) that doesn't use ∧.",
+        starter: "¬p ∨ ¬q",
+        hints: {
+          H0: "Look at the rows of the truth table where your formula and ¬(p ∧ q) disagree.",
+          H1: "The idea: De Morgan's laws turn a negated ∧ into an ∨ of negations.",
+          H3: { text: "Similar problem: ¬(p ∨ q) without ∨.", code: "¬(p ∨ q) ≡ ¬p ∧ ¬q" },
+        },
+        last_step: { kind: "step_order", label: "Step ordering: put the steps in order", lines: ["¬(p ∧ q)", "≡ ¬p ∨ ¬q   (De Morgan)"], decoys: ["≡ ¬p ∧ ¬q"], start: ["d0", 1, 0] },
+        tip: "Strategy: check an equivalence with the full truth table, not one example row.",
+        quick: "qc-implies",
+      },
+      {
+        id: "logic-proof", type: "logic_proof", subject: "logic", concept: "Natural deduction", concept_ids: ["logic.natural_deduction"],
+        title: "Prove q from p → q and p ∧ r", status: "new", minutes: 10, source: "bank",
+        statement: "Premises: (1) p → q, (2) p ∧ r. Prove q. One step per line: formula + rule + the lines it uses.",
+        premises: ["p → q", "p ∧ r"],
+        starter: [{ f: "", rule: "∧E", refs: "" }],
+        hints: {
+          H0: "Look at the first step the checker marks as not following from the lines it cites.",
+          H1: "The idea: →E (modus ponens) needs both p → q and p on earlier lines. Can you get p on its own first?",
+          H3: { text: "Similar proof: from a → b and a ∧ c, prove b.", code: "3. a      ∧E 2\n4. b      →E 1, 3" },
+        },
+        last_step: { kind: "proof_parsons", label: "Proof Parsons: put the steps in order", lines: ["3. p      ∧E 2", "4. q      →E 1, 3"], decoys: ["3. q      →E 1, 2"], start: [1, "d0", 0] },
+        tip: "Strategy: work backwards from the goal. What rule produces q, and what does it need?",
+      },
+      {
+        id: "hs-length", type: "code", language: "haskell", subject: "haskell", concept: "Recursion on lists", concept_ids: ["haskell.list_recursion"],
+        title: "Length of a list", status: "new", minutes: 10, source: "bank",
+        statement: "Define `myLength :: [a] -> Int` recursively, without using `length`.",
+        signature: "myLength :: [a] -> Int",
+        starter: "myLength :: [a] -> Int\nmyLength [] = undefined\nmyLength (x:xs) = undefined\n",
+        visible_checks: [{ input: "myLength []", expected: "0" }, { input: "myLength [7, 8]", expected: "2" }, { input: "myLength \"abc\"", expected: "3" }],
+        hints: {
+          H0: "Look at the first failing call: what should the empty list give?",
+          H1: "The idea: the empty list is the base case; for (x:xs) the length is one more than the length of xs.",
+          H3: { text: "Similar problem: sum a list of numbers.", code: "mySum :: [Int] -> Int\nmySum []     = 0\nmySum (x:xs) = x + mySum xs" },
+        },
+        last_step: { kind: "parsons", label: "Parsons: put the lines in order", lines: ["myLength :: [a] -> Int", "myLength [] = 0", "myLength (_:xs) = 1 + myLength xs"], decoys: ["myLength (x:xs) = x + myLength xs"], start: [2, "d0", 0, 1] },
+        tip: "Strategy: write the base case first, then assume the recursive call works.",
+      },
     ],
+    uploadItems: [
+      {
+        id: "up-vowels", type: "code", language: "python", subject: "python", concept: "Strings & loops", concept_ids: ["python.strings", "python.loops"],
+        title: "Week 5 tutorial · Q3 (count vowels)", status: "new", minutes: 10, source: "upload",
+        statement: "Write `count_vowels(s)` that returns how many characters of `s` are vowels (a, e, i, o, u; lowercase only).",
+        signature: "def count_vowels(s: str) -> int",
+        starter: "def count_vowels(s):\n    count = 0\n    for ch in s:\n        if ch == \"aeiou\":\n            count += 1\n    return count\n",
+        visible_checks: [{ input: "\"banana\"", expected: "3" }, { input: "\"\"", expected: "0" }, { input: "\"sky\"", expected: "0" }],
+        hints: {
+          H0: "Look at the first failing case, \"banana\". Which characters should be counted?",
+          H1: "The idea: `==` compares the whole string; to test membership use `in`.",
+          H3: { text: "Similar problem: count the digits in a string.", code: "def count_digits(s):\n    count = 0\n    for ch in s:\n        if ch in \"0123456789\":\n            count += 1\n    return count" },
+        },
+        last_step: { kind: "parsons", label: "Parsons: put the lines in order", lines: ["def count_vowels(s):", "    count = 0", "    for ch in s:", "        if ch in \"aeiou\":", "            count += 1", "    return count"], decoys: ["        if ch == \"aeiou\":"], start: [2, 0, "d0", 5, 1, 3, 4] },
+        tip: "Strategy: print the comparison for one character to see what it really tests.",
+      },
+    ],
+    quick: [
+      { id: "list-product", from: "list-total", title: "List product", concept: "Loops & lists", note: "Same idea as List total: combine every item.", minutes: 5, language: "python",
+        statement: "Write `list_product(nums)` that returns the product of every number in `nums`. An empty list gives 1.",
+        starter: "def list_product(nums):\n    \n", visible_checks: [{ input: "[2, 3, 4]", expected: "24" }, { input: "[]", expected: "1" }] },
+      { id: "count-digits", from: "digit-sum", title: "Count digits", concept: "Functions & recursion", note: "Same idea as Digit sum: recurse on n // 10.", minutes: 5, language: "python",
+        statement: "Write a recursive `count_digits(n)` for a non-negative integer `n` (count_digits(0) is 1).",
+        starter: "def count_digits(n):\n    \n", visible_checks: [{ input: "0", expected: "1" }, { input: "907", expected: "3" }] },
+      { id: "qc-implies", from: "logic-equiv", title: "¬(p ∨ q) without ∨", concept: "Equivalences", note: "Same idea as ¬(p ∧ q) without ∧.", minutes: 4, done: true },
+    ],
+    schedule: [
+      { concept: "Functions & recursion", subject: "Python", status: "due_now" },
+      { concept: "Equivalences", subject: "Propositional logic", status: "due_now" },
+      { concept: "Determinants", subject: "Linear Algebra 1", status: "due_now" },
+      { concept: "Loops & lists", subject: "Python", status: "not_started" },
+      { concept: "Natural deduction", subject: "Propositional logic", status: "worth_practising" },
+      { concept: "Recursion on lists", subject: "Haskell", status: "next_in_N_days", days: 5 },
+    ],
+    mixed: {
+      id: "mx-1", minutes: 20,
+      problems: [
+        { id: "m1", concept: "Functions & recursion", subject: "Python", kind: "code", statement: "Write a recursive `power(b, e)` for integers b and e ≥ 0, without using `**`.", starter: "def power(b, e):\n    \n" },
+        { id: "m2", concept: "Equivalences", subject: "Propositional logic", kind: "formula", statement: "Write a formula equivalent to p → q that doesn't use →.", starter: "" },
+        { id: "m3", concept: "Determinants", subject: "Linear Algebra 1", kind: "expression", statement: "det([[1, 2], [3, 4]]) = ?", starter: "" },
+      ],
+    },
+    uploads: [
+      { id: "up-1", title: "Week 5 tutorial · Q3 (count vowels)", subject: "Python", source: "PDF", status: "verified", item_id: "up-vowels", when: "Today 09:12" },
+      { id: "up-0", title: "LA sheet 2 · Q1 (span in words)", subject: "Linear Algebra", source: "Text", status: "unverified", item_id: null, when: "Fri 24 Oct" },
+    ],
+    picks: [
+      { item: "logic-proof", why: "Natural deduction is worth practising: your last quick challenge on it didn't pass." },
+      { item: "la-det", why: "You needed H3 last time. Another try on your own would show it stuck." },
+    ],
+    suggested: { item: "hs-length", why: "Your plan includes recursion. This is the same idea in Haskell, and it's next in Inf1A." },
   },
-
-  starterCode:
-`def stock_status(quantity):
-    if quantity == 0:
-        return "sold_out"
-    elif quantity < 3:
-        return "low"
-    else:
-        return "available"
-`,
-
-  // EvaluationResult for attempt 1 (unaided)
-  evaluation: {
-    attempt_id: "a-3f9e", grading_validity: "valid",
-    test_summary: { passed: 3, total: 4 },
-    tests: [
-      { test_id: "T1", requirement_id: "R1", ok: true, label: "public example" },
-      { test_id: "T2", requirement_id: "R2", ok: true, label: "public example" },
-      { test_id: "T3", requirement_id: "R3", ok: true, label: "boundary" },
-      { test_id: "T4", requirement_id: "R2", ok: false, input_repr: "3", expected_repr: "\"low\"", actual_repr: "\"available\"" },
-    ],
-  },
-
-  // HintResponse sequence grounded on failure T4
-  hints: [
-    { level: 1, title: "Where is the error?", hint_text: "Which branch of your function decides between \"low\" and \"available\"? Look at what happens for the failing input 3.", student_action: "Point to the branch" },
-    { level: 2, title: "What should this code do?", hint_text: "What should this condition return when quantity is 3, and why?", student_action: "Explain the intended branch" },
-    { level: 3, title: "What if you changed it?", hint_text: "What changes for quantity 3 if `<` becomes `<=`? Predict the results for 2, 3 and 4 before editing.", student_action: "Predict, then edit and resubmit" },
-    { level: 4, title: "Answer + explanation", hint_text: "The boundary is inclusive: R2 says 1–3 are \"low\", so the condition must include 3. `quantity < 3` stops at 2. Use `quantity <= 3` (or `< 4`). Next, try a new unaided task: label exam marks as fail / pass / distinction using inclusive bounds.", student_action: "Apply the repair; a new transfer task is scheduled" },
-  ],
 
   // Student-safe ProjectSpec
   project: {

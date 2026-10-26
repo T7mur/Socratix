@@ -19,17 +19,6 @@
     },
     dash: { generating: null },
     skills: { view: "graph", selected: "python.conditionals", challenged: false },
-    learn: {
-      code: D.starterCode,
-      explanation: "I used == 0 for sold out, then < 3 for low.",
-      job: "done",           // idle | queued | running | done
-      outcome: "fail",       // fail | pass | unavailable | uncertain
-      attempt: 1,
-      hintsUsed: 2,
-      revealArmed: false,
-      revealed: false,
-      revealAck: false,
-    },
     project: { tab: "design", milestone: "M3", hintsUsed: 1 },
     reflection: { step: "write", confidence: 40, difficulty: "hard", evidence: true, tags: new Set(["python.conditionals"]) },
     review: { filter: "all", selected: "rv-1", decisions: {} },
@@ -78,7 +67,7 @@
     { id: "dashboard", label: "Dashboard", icon: "layout-dashboard", href: "#/dashboard" },
     { id: "plan", label: "Plan", icon: "target", href: "#/plan" },
     { id: "skills", label: "Skills", icon: "network", href: "#/skills" },
-    { id: "learn", label: "Exercise", icon: "book-open-check", href: "#/learn/stock-status", count: "1" },
+    { id: "practice", label: "Practice", icon: "book-open-check", href: "#/practice" },
     { id: "projects", label: "Project", icon: "folder-kanban", href: "#/projects/cafe-terminal" },
     { id: "reflection", label: "Reflection", icon: "notebook-pen", href: "#/reflection" },
   ];
@@ -87,15 +76,22 @@
     dashboard: { title: "Dashboard", render: pageDashboard },
     plan: { title: "Plan", render: pagePlan },
     skills: { title: "Skills", render: pageSkills },
-    learn: { title: "Stock classifier", parent: "Exercise", render: pageLearn },
+    practice: { title: "Practice", render: () => PR.render(hashParts()) },
     projects: { title: "Campus Café Terminal", parent: "Project", render: pageProject },
     reflection: { title: "Reflection", render: pageReflection },
     review: { title: "Review queue", parent: "Instructor", render: pageReview },
     settings: { title: "Settings", render: pageSettings },
   };
 
+  let PR; // Practice module (practice.js), created once the helpers below exist
+  function hashParts() {
+    const [path, qs] = location.hash.replace(/^#\/?/, "").split("?");
+    return { path: path.split("/").filter(Boolean).slice(1), query: Object.fromEntries(new URLSearchParams(qs || "")) };
+  }
+
   function currentRoute() {
-    const seg = (location.hash.replace(/^#\/?/, "").split("/")[0] || "dashboard");
+    const seg = (location.hash.replace(/^#\/?/, "").split("?")[0].split("/")[0] || "dashboard");
+    if (seg === "learn") { location.replace("#/practice/list-total"); return "practice"; }
     if (seg === "login") return "login";
     return ROUTES[seg] ? seg : "dashboard";
   }
@@ -105,7 +101,7 @@
     if (id === "login") {
       app.innerHTML = pageLogin();
     } else {
-      const r = ROUTES[id];
+      const r = id === "practice" ? { ...ROUTES.practice, ...PR.meta(hashParts()) } : ROUTES[id];
       app.innerHTML = shell(id, r, r.render());
     }
     bind(id);
@@ -197,11 +193,11 @@
     <div class="page-head">
       <div>
         <h1>Good afternoon, Sam</h1>
-        <p>One retention check is due today and your stock classifier attempt is waiting for a resubmit.</p>
+        <p>One retention check is due today and your List total exercise is waiting where you left it.</p>
       </div>
       <div class="page-actions">
         <a class="btn" href="#/plan">${icon("target")}Edit plan</a>
-        <a class="btn" href="#/learn/stock-status">${icon("book-open-check")}Resume exercise</a>
+        <a class="btn" href="#/practice/list-total?task=t-loops">${icon("book-open-check")}Continue practice</a>
       </div>
     </div>
 
@@ -522,7 +518,7 @@
     </div>`;
   }
 
-  // ---------- learn ----------
+  // ---------- code editor (project) ----------
   function editor(code, file, meta) {
     const lines = code.split("\n").length;
     return `
@@ -534,148 +530,6 @@
         <textarea data-code spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off" aria-label="Code editor, ${file}">${esc(code)}</textarea>
       </div>
     </div>`;
-  }
-
-  function evaluationBlock() {
-    const L = state.learn, ev = D.evaluation;
-    const steps = ["queued", "running", "succeeded"];
-    if (L.job === "idle") return `<div class="results"><div class="results-head"><span class="small faint">Not submitted yet. Tests run on an isolated grader, never in your browser.</span></div></div>`;
-    if (L.job === "queued" || L.job === "running") {
-      const i = steps.indexOf(L.job);
-      return `<div class="results" aria-busy="true"><div class="results-head" role="status" aria-live="polite"><span class="job">Grading attempt ${L.attempt}</span><span class="job-steps">${steps.map((s, k) => `<span class="${k < i ? "done" : k === i ? "on" : ""}">${s}</span>`).join("")}</span></div></div>`;
-    }
-    if (L.outcome === "unavailable") return `<div class="results"><div class="results-body" style="padding-top:14px"><div class="note fail" role="alert">${icon("server-crash")}<div><b>Grader unavailable (503).</b> Your attempt was saved but not graded, and nothing was recorded against your skills. Try again in a minute.</div></div></div></div>`;
-    if (L.outcome === "uncertain") return `<div class="results"><div class="results-body" style="padding-top:14px"><div class="note warn" role="status">${icon("triangle-alert")}<div><b>Grading uncertain.</b> A test for this task has been flagged for instructor review. This result will not change your skill estimate.</div></div></div></div>`;
-    const pass = L.outcome === "pass";
-    const tests = pass ? ev.tests.map((t) => ({ ...t, ok: true })) : ev.tests;
-    const passed = tests.filter((t) => t.ok).length;
-    return `
-    <div class="results">
-      <div class="results-head" role="status" aria-live="polite">
-        <b class="small">Attempt ${L.attempt}</b>
-        <span class="badge ${pass ? "b-pass" : "b-fail"}">${passed} / ${tests.length} tests passed</span>
-        <span class="badge b-neutral plain" title="grading_validity">grading valid</span>
-        <span class="job-steps hide-sm">${steps.map((s) => `<span class="done">${s}</span>`).join("")}</span>
-      </div>
-      <div class="results-body">
-        ${tests.map((t) => `
-          <div class="test-row">${t.ok ? `<span class="ok">${icon("check")}</span>` : `<span class="bad">${icon("x")}</span>`}<span>${t.test_id}</span><span class="faint">${t.requirement_id}</span>
-          <span class="${t.ok ? "faint" : ""}">${t.ok ? (t.label || "passed") : `stock_status(${t.input_repr}) → expected ${esc(t.expected_repr)}, got ${esc(t.actual_repr)}`}</span></div>`).join("")}
-        ${pass ? `<div class="note pass" style="margin-top:6px">${icon("circle-check")}<div>All requirements met. ${L.revealed ? "Because the answer was revealed, this counts as an assisted solution, not independent mastery." : L.hintsUsed ? `Recorded as <b>assisted progress</b> (hint level ${L.hintsUsed} used). An unaided transfer check is scheduled for Mon 27 Oct.` : "Recorded as independent evidence."}<div class="row" style="margin-top:8px"><a class="btn btn-sm btn-primary" href="#/reflection">${icon("notebook-pen")}Reflect on this attempt</a></div></div></div>` : ""}
-      </div>
-    </div>`;
-  }
-
-  function hintLadder() {
-    const L = state.learn;
-    return D.hints.map((h) => {
-      const used = h.level <= L.hintsUsed || (h.level === 4 && L.revealed);
-      const next = !used && h.level === L.hintsUsed + 1;
-      const reveal = h.level === 4;
-      return `
-      <div class="rung ${used ? "used" : ""} ${next ? "next" : ""} ${reveal ? "reveal" : ""}">
-        <span class="rung-node" aria-hidden="true">${h.level}</span>
-        <div class="rung-body">
-          <div class="rung-title">${h.title}<small>level ${h.level}</small></div>
-          ${used ? `<div class="hint-bubble">${esc(h.hint_text).replace(/`([^`]+)`/g, "<code>$1</code>")}<div class="act">${icon("corner-down-right")}${esc(h.student_action)}</div></div>`
-          : next && !reveal ? `<div><button class="btn btn-sm" type="button" data-act="hint">${icon("lightbulb")}Ask for a level ${h.level} hint</button></div>`
-          : reveal && next ? (L.revealArmed ? `
-            <div class="reveal-box" role="group" aria-labelledby="rv-warn">
-              <p class="small" id="rv-warn"><b>Revealing the answer ends this attempt's independent credit.</b> Passing afterwards is recorded as an assisted solution, and you'll get a new unaided task later.</p>
-              <label class="check small"><input type="checkbox" data-act="ack" ${L.revealAck ? "checked" : ""}> I understand this attempt won't count as independently solved</label>
-              <div class="row"><button class="btn btn-sm btn-danger" type="button" data-act="reveal" ${L.revealAck ? "" : "disabled"}>${icon("eye")}Reveal answer</button><button class="btn btn-sm btn-ghost" type="button" data-act="unarm">Keep trying</button></div>
-            </div>` : `<div><button class="btn btn-sm btn-danger" type="button" data-act="arm">${icon("eye")}Show answer + explanation</button></div>`)
-          : `<span class="tiny faint">${reveal ? "Available after level 3" : "Locked until the previous level"}</span>`}
-        </div>
-      </div>`;
-    }).join("");
-  }
-
-  function pageLearn() {
-    const t = D.task, L = state.learn;
-    const busy = L.job === "queued" || L.job === "running";
-    return `
-    <div class="page-head">
-      <div>
-        <h1>${t.title}</h1>
-        <div class="row" style="margin-top:8px">
-          <span class="badge b-neutral plain">${ACTIVITY[t.activity_type]}</span>${stageBadge(t.assessment_stage)}
-          <span class="badge b-pass" title="Passed QA checks: the reference solution passes and the tests catch faulty versions. Not proof of perfect teaching quality.">verified</span>${t.target_skill_ids.map((s) => chip(s)).join("")}
-        </div>
-      </div>
-      <div class="page-actions"><span class="small faint mono">task v${t.task_version} · ${t.outcome_ids[0]}</span></div>
-    </div>
-
-    <div class="work3">
-      <section class="panel" aria-labelledby="task-h">
-        <div class="panel-head"><h2 id="task-h">Task</h2><span class="sub">~15 min</span></div>
-        <div class="panel-body stack-sm" style="gap:16px">
-          <nav class="stage-track" aria-label="Assessment stages">
-            ${t.stages.map((s) => `<button type="button" style="--stage-c:var(--${s.stage === "understanding" ? "understand" : s.stage})" ${s.state === "current" ? 'aria-current="step"' : ""} data-toast="${s.state === "done" ? `${s.label} stage completed on Thu 23 Oct, graded with a rubric.` : "You are on the transfer stage: code and explanation, checked by automatic tests."}"><span><span class="sdot"></span>${s.label}</span><span class="st-state">${s.state === "done" ? "Done" : "Now"}</span><small style="grid-column:1/-1">${s.detail} · ${s.grading}</small></button>`).join("")}
-          </nav>
-          <p>${esc(t.student_brief)}</p>
-          <div class="sig">${hlPy(`def ${t.function_contract.name}(${t.function_contract.parameters.map((p) => `${p.name}: ${p.type}`).join(", ")}) -> ${t.function_contract.returns}:`)}</div>
-          <div><h3 style="margin-bottom:6px">Requirements</h3>
-            ${t.requirements.map((r) => `<div class="req"><span class="rid">${r.requirement_id}</span><span>${esc(r.description)}</span><span></span></div>`).join("")}
-          </div>
-          <div><h3 style="margin-bottom:6px">Examples</h3>
-            <table class="data"><thead><tr><th>Call</th><th>Returns</th></tr></thead><tbody>${t.public_examples.map((e) => `<tr><td class="mono">stock_status(${e.args.join(", ")})</td><td class="mono">"${e.expected}"</td></tr>`).join("")}</tbody></table>
-          </div>
-          <dl class="kv"><dt>Inputs</dt><dd>${t.input_constraints.join("; ")}</dd><dt>Allowed</dt><dd>Comparisons, conditionals</dd></dl>
-          <div class="note">${icon("lock")}<div>More tests run on the grader. They're never shown, but each failure tells you which requirement it checks.</div></div>
-        </div>
-      </section>
-
-      <section class="stack" style="gap:16px" aria-labelledby="ws-h">
-        <h2 id="ws-h" class="sr-only">Your workspace</h2>
-        <div class="editor">
-          ${editor(L.code, "stock_status.py", `<span class="tiny">Draft for attempt ${L.attempt + (L.job === "done" ? 1 : 0)} · saved locally</span>`)}
-          ${evaluationBlock()}
-        </div>
-        <div class="panel"><div class="panel-body stack-sm" style="padding-top:16px">
-          <div class="field">
-            <label for="expl">${esc(t.explanation_questions[0])}</label>
-            <textarea class="textarea" id="expl" rows="3" data-expl>${esc(L.explanation)}</textarea>
-            <span class="hint-text">Your explanation is part of the evidence, but writing style is never scored as mastery.</span>
-          </div>
-          <div class="row between">
-            <div class="evidence" style="flex:1;min-width:260px">
-              <div><span class="k">Correctness</span><span class="v">${L.job === "done" && (L.outcome === "pass" || L.outcome === "fail") ? (L.outcome === "pass" ? "4 / 4" : "3 / 4") : "—"}</span></div>
-              <div><span class="k">Help used</span><span class="v">${L.revealed ? "Answer revealed" : L.hintsUsed ? `Hint level ${L.hintsUsed}` : "None"}</span></div>
-              <div><span class="k">Independent evidence</span><span class="v ${L.hintsUsed || L.revealed ? "muted" : ""}">${L.hintsUsed || L.revealed ? "Not this attempt" : "Yes, if passed"}</span></div>
-            </div>
-          </div>
-          <div class="row">
-            <button class="btn ${L.outcome === "pass" && L.job === "done" ? "" : "btn-primary"} ${busy ? "is-loading" : ""}" type="button" data-act="submit" ${busy ? "disabled" : ""}>${busy ? "Grading" : `${icon("send")}Submit attempt ${L.attempt + (L.job === "done" ? 1 : 0)}`}</button>
-            <button class="btn btn-ghost" type="button" data-act="reset-code">${icon("rotate-ccw")}Reset to last submission</button>
-          </div>
-        </div></div>
-      </section>
-
-      <aside class="panel tutor-col" aria-labelledby="hint-h">
-        <div class="panel-head"><h2 id="hint-h">Hints</h2><span class="sub">${L.hintsUsed} of 4 used</span></div>
-        <div class="panel-body stack-sm" style="gap:16px">
-          <p class="small muted">Help goes up one level at a time, and every level you use is recorded. Try editing and resubmitting between hints.</p>
-          <div class="ladder">${hintLadder()}</div>
-          <hr class="divider" style="margin:0">
-          <div class="stack-sm" style="gap:8px">
-            <h3>Your responses</h3>
-            <div class="small"><span class="faint mono">L1 · 10:44</span> “It's the elif that returns low.”</div>
-            <div class="small"><span class="faint mono">L2 · 10:51</span> “3 should be low because R2 says 1–3.”</div>
-          </div>
-        </div>
-      </aside>
-    </div>
-
-    <details class="panel" style="padding:12px 20px">
-      <summary class="small muted" style="cursor:pointer">Prototype only: preview other grading states</summary>
-      <div class="row" style="margin-top:10px">
-        <button class="btn btn-sm" type="button" data-outcome="fail">Boundary failure (T4)</button>
-        <button class="btn btn-sm" type="button" data-outcome="pass">All pass</button>
-        <button class="btn btn-sm" type="button" data-outcome="unavailable">Grader unavailable</button>
-        <button class="btn btn-sm" type="button" data-outcome="uncertain">Uncertain test</button>
-      </div>
-    </details>`;
   }
 
   // ---------- project ----------
@@ -978,7 +832,6 @@
         hl.innerHTML = hlPy(codeTa.value) + "\n";
         const n = codeTa.value.split("\n").length;
         if (gutter.children.length !== n) gutter.innerHTML = Array.from({ length: n }, (_, i) => `<span>${i + 1}</span>`).join("");
-        if (id === "learn") state.learn.code = codeTa.value;
       };
       codeTa.addEventListener("input", sync);
       codeTa.addEventListener("keydown", (e) => {
@@ -988,10 +841,12 @@
 
     const on = (sel, fn, ev = "click") => app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, (e) => fn(el, e)));
 
+    if (id === "practice") PR.bind(app, hashParts());
+
     if (id === "dashboard") {
       on('[data-act="toggle-override"]', (b) => { const o = app.querySelector("#override"); o.hidden = !o.hidden; b.setAttribute("aria-expanded", String(!o.hidden)); });
       on('[data-act="generate"]', async () => {
-        if (state.dash.generating === "succeeded") { location.hash = "#/learn/stock-status"; return; }
+        if (state.dash.generating === "succeeded") { location.hash = "#/practice/list-total"; return; }
         const gen = routeGen;
         for (const s of ["queued", "running", "succeeded"]) {
           if (!stillOn(gen)) { state.dash.generating = null; return; }
@@ -1018,27 +873,6 @@
       on("[data-skill]", pick);
       on(".gnode", (g, e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(g); } }, "keydown");
       on('[data-act="challenge"]', () => { state.skills.challenged = true; render(); toast("Reassessment job queued: a new diagnostic in a fresh context."); });
-    }
-
-    if (id === "learn") {
-      const L = state.learn;
-      on("[data-expl]", (t) => { L.explanation = t.value; }, "input");
-      on('[data-act="submit"]', async () => {
-        const fixed = /elif\s+quantity\s*(<=\s*3|<\s*4)\b/.test(L.code);
-        L.attempt += L.job === "done" ? 1 : 0;
-        const gen = routeGen;
-        for (const s of ["queued", "running"]) { L.job = s; if (stillOn(gen)) render(); await sleep(800); }
-        L.job = "done"; L.outcome = fixed ? "pass" : "fail";
-        if (!stillOn(gen)) return;
-        render(); toast(fixed ? "All 4 tests passed." : "3 of 4 tests passed. T4 (R2) still fails.");
-      });
-      on('[data-act="reset-code"]', () => { L.code = D.starterCode; render(); });
-      on('[data-act="hint"]', () => { L.hintsUsed = Math.min(3, L.hintsUsed + 1); render(); toast(`Level ${L.hintsUsed} hint recorded for attempt ${L.attempt}.`); });
-      on('[data-act="arm"]', () => { L.revealArmed = true; render(); });
-      on('[data-act="unarm"]', () => { L.revealArmed = false; L.revealAck = false; render(); });
-      on('[data-act="ack"]', (c) => { L.revealAck = c.checked; render(); }, "change");
-      on('[data-act="reveal"]', () => { L.revealed = true; L.revealArmed = false; render(); toast("Answer revealed. This attempt is marked assisted."); });
-      on("[data-outcome]", (b) => { L.job = "done"; L.outcome = b.dataset.outcome; render(); });
     }
 
     if (id === "projects") {
@@ -1080,5 +914,11 @@
     }
   }
 
+  PR = window.PracticeModule({
+    D, esc, icon, toast, hlPy, sleep,
+    gen: () => routeGen, stillOn,
+    render: () => render(false),
+    icons: () => window.lucide && window.lucide.createIcons({ attrs: { "aria-hidden": "true" } }),
+  });
   render();
 })();
