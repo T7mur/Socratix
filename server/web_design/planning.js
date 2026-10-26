@@ -278,8 +278,10 @@ window.PlanningModule = (SX) => {
   });
   let seq = 10;
   function blankTask() { return { id: "t" + seq++, text: "", time: "", mins: 30, where: "", verdict: null, overridden: false, accepted: false, changedSinceReview: true, status: "planned", movedTo: null }; }
-  let W = (() => { const d = LS.get("socratix-plan-draft", null); return d && d.date === F.today && !d.submitted ? d : newWizard(F.today, true); })();
-  const saveDraft = () => { if (!W.submitted) LS.set("socratix-plan-draft", W); };
+  // in-flight request flags are never part of a draft: a reload mid-request must not leave a button stuck
+  const clearInFlight = (d) => { d.evaluating = false; d.submitting = false; d.reading = false; if (d.ask) d.ask.loading = false; return d; };
+  let W = (() => { const d = LS.get("socratix-plan-draft", null); return d && d.date === F.today && !d.submitted ? clearInFlight(d) : newWizard(F.today, true); })();
+  const saveDraft = () => { if (!W.submitted) LS.set("socratix-plan-draft", clearInFlight(JSON.parse(JSON.stringify(W)))); };
 
   const competent = () => db.student.path === "competent";
   const onTargetCount = () => db.student.recent.filter(Boolean).length;
@@ -876,8 +878,9 @@ window.PlanningModule = (SX) => {
         if (!W.tasks.length) { toast("Add at least one task."); return; }
         W.evaluating = true; location.hash = "#/plan/today/3";
         try { await api(() => evaluate()); }
-        catch { W.evaluating = false; location.hash = "#/plan/today/2"; throw new Error("net"); }
-        W.evaluating = false; saveDraft(); rr();
+        catch { location.hash = "#/plan/today/2"; throw new Error("net"); }
+        finally { W.evaluating = false; }
+        saveDraft(); rr();
       });
 
       // wizard step 3
