@@ -5,6 +5,10 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID, uuid4
 
+from dataclasses import dataclass
+from collections.abc import Mapping as AbstractMapping
+from copy import deepcopy
+from types import MappingProxyType
 from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
@@ -564,3 +568,57 @@ async def generate_task_spec_async(
         ) from error
 
     return task
+
+
+
+@dataclass(frozen=True)
+class FrozenTaskSpec:
+    """A validated, immutable in-memory exercise specification."""
+
+    data: AbstractMapping[str, Any]
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a separate JSON-compatible copy of the frozen data."""
+
+        def thaw(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                return {
+                    key: thaw(item)
+                    for key, item in value.items()
+                }
+
+            if isinstance(value, tuple):
+                return [thaw(item) for item in value]
+
+            return value
+
+        return thaw(self.data)
+
+
+def _freeze_value(value: Any) -> Any:
+    """Recursively convert JSON structures into immutable values."""
+
+    if isinstance(value, Mapping):
+        return MappingProxyType({
+            key: _freeze_value(item)
+            for key, item in value.items()
+        })
+
+    if isinstance(value, list):
+        return tuple(_freeze_value(item) for item in value)
+
+    return value
+
+
+def freeze_task_spec(
+    task: Mapping[str, Any],
+    brief: Mapping[str, Any],
+) -> FrozenTaskSpec:
+    """Validate and freeze a student-facing draft specification."""
+
+    validate_generated_task_spec(task, brief)
+
+    snapshot = deepcopy(dict(task))
+
+    return FrozenTaskSpec(data=_freeze_value(snapshot))
+

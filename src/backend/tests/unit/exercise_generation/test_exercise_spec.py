@@ -11,6 +11,7 @@ from app.modules.exercise_generation.spec import (
     TaskProviderError,
     TaskOutputError,
 )
+from app.modules.exercise_generation.spec import freeze_task_spec
 
 from app.modules.exercise_generation.spec import (
     TaskGenerationError,
@@ -509,3 +510,45 @@ async def test_async_gateway_generates_valid_task(valid_spec_data):
 
     assert result["title"] == "Stock classifier"
     assert result["verification_status"] == "draft"
+
+
+def test_freeze_creates_immutable_task(valid_spec_data):
+    task, brief = copy.deepcopy(valid_spec_data)
+
+    frozen = freeze_task_spec(task, brief)
+
+    with pytest.raises(TypeError):
+        frozen["title"] = "Changed title"
+
+
+def test_frozen_requirements_cannot_change(valid_spec_data):
+    task, brief = copy.deepcopy(valid_spec_data)
+
+    frozen = freeze_task_spec(task, brief)
+
+    with pytest.raises(TypeError):
+        frozen["requirements"][0]["description"] = "Changed"
+
+
+
+def test_original_changes_do_not_affect_frozen_task(valid_spec_data):
+    task, brief = copy.deepcopy(valid_spec_data)
+
+    frozen = freeze_task_spec(task, brief)
+
+    task["requirements"][0]["description"] = "Modified later"
+
+    assert (
+        frozen.data["requirements"][0]["description"]
+        == "0 returns sold_out"
+    )
+
+
+
+def test_invalid_task_cannot_be_frozen(valid_spec_data):
+    task, brief = copy.deepcopy(valid_spec_data)
+
+    task["verification_status"] = "published"
+
+    with pytest.raises(TaskSpecValidationError):
+        freeze_task_spec(task, brief)
