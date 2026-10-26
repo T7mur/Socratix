@@ -4,6 +4,7 @@
 import pytest
 from uuid import UUID
 
+from app.modules.exercise_generation.review import review_exercise_spec
 from app.modules.exercise_generation.publishing import PublishingError
 from app.modules.exercise_generation.spec import TaskOutputError
 from app.modules.exercise_generation.brief import validate_eligibility
@@ -146,6 +147,24 @@ async def test_complete_exercise_generation_pipeline():
                     "human_review_status": "not_required",
                 }
 
+
+            if operation == "exercise_semantic_review":
+                assert "task_spec" in payload
+                assert "source_code" not in payload
+                assert "test_cases" not in payload
+
+                return {
+                    "decision": "approved",
+                    "findings": [
+                        "Requirements and public examples are consistent."
+                    ],
+                    "requirements_aligned": True,
+                    "outcomes_aligned": True,
+                    "scope_respected": True,
+                    "examples_consistent": True,
+                }
+
+
             if operation == "exercise_reference_generation":
                 assert "task_spec" in payload
 
@@ -216,6 +235,23 @@ async def test_complete_exercise_generation_pipeline():
     assert frozen.data["title"] == "Stock classifier"
     assert len(frozen.data["requirements"]) == 3
 
+
+    # Independently review the frozen specification before
+    # generating any private grading artifacts.
+
+    review = await review_exercise_spec(
+        frozen,
+        gateway,
+        model_alias="test-model",
+        approved_outcome_context=outcomes,
+    )
+
+
+    assert review["decision"] == "approved"
+    assert review["requirements_aligned"] is True
+    assert review["outcomes_aligned"] is True
+
+
     # STEP 4: Independently generate private artifacts.
     reference = await generate_reference_candidate(
         frozen,
@@ -232,11 +268,14 @@ async def test_complete_exercise_generation_pipeline():
     assert "def stock_status" in reference["source_code"]
     assert len(tests["test_cases"]) == 3
 
+
     assert gateway.operations == [
         "exercise_spec_generation",
+        "exercise_semantic_review",
         "exercise_reference_generation",
         "exercise_test_generation",
     ]
+
 
     # Private reference code must not enter the public task.
     assert "source_code" not in frozen.to_payload()

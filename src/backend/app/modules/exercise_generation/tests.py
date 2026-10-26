@@ -128,3 +128,110 @@ async def generate_test_candidates(
             )
 
     return suite.model_dump()
+
+
+class RubricCriterion(BaseModel):
+    """Private scoring criterion linked to an exercise requirement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    requirement_id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    evidence_expected: str = Field(min_length=1)
+    max_points: int = Field(ge=1, le=100)
+
+
+class NonCodingRubric(BaseModel):
+    """Private rubric candidate for a written-answer exercise."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    criteria: list[RubricCriterion] = Field(min_length=1)
+
+
+async def generate_rubric_candidate(
+    frozen_task: FrozenTaskSpec,
+    gateway: TestLLMGateway,
+    *,
+    model_alias: str,
+) -> dict[str, Any]:
+    """Generate private grading criteria for a non-coding exercise."""
+
+    if not isinstance(frozen_task, FrozenTaskSpec):
+        raise TestGenerationError(
+            "Rubric generation requires a FrozenTaskSpec"
+        )
+
+    task = frozen_task.to_payload()
+
+    if task.get("function_contract") is not None:
+        raise TestGenerationError(
+            "Rubric generation requires a non-coding task"
+        )
+
+    prompt_path = (
+        Path(__file__).resolve().parents[4]
+        / "shared"
+        / "prompts"
+        / "exercise"
+        / "rubric_v1.txt"
+    )
+
+    try:
+        prompt = prompt_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise TestGenerationError(
+            "Rubric generation prompt is unavailable"
+        ) from error
+
+    payload = {
+        "task_id": task["task_id"],
+        "task_version": task["task_version"],
+        "assessment_stage": task["assessment_stage"],
+        "requirements": task["requirements"],
+        "student_brief": task["student_brief"],
+        "explanation_questions": task["explanation_questions"],
+        "outcome_ids": task["outcome_ids"],
+    }
+
+    try:
+        raw = await gateway.generate_json(
+            operation="exercise_rubric_generation",
+            model_alias=model_alias,
+            system_prompt=prompt,
+            payload=payload,
+            schema=NonCodingRubric,
+        )
+    except Exception as error:
+        raise TestGenerationError(
+            "Rubric generation provider failed"
+        ) from error
+
+    try:
+        rubric = NonCodingRubric.model_validate(raw)
+    except ValueError as error:
+        raise TestGenerationError(
+            "Invalid grading rubric response"
+        ) from error
+
+    required_ids = {
+        requirement["requirement_id"]
+        for requirement in task["requirements"]
+    }
+
+    criterion_ids = [
+        criterion.requirement_id
+        for criterion in rubric.criteria
+    ]
+
+    if set(criterion_ids) != required_ids:
+        raise TestGenerationError(
+            "Rubric must cover every requirement exactly"
+        )
+
+    if len(criterion_ids) != len(required_ids):
+        raise TestGenerationError(
+            "Rubric contains duplicate requirement criteria"
+        )
+
+    return rubric.model_dump()

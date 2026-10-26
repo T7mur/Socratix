@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -622,3 +623,58 @@ def freeze_task_spec(
 
     return FrozenTaskSpec(data=_freeze_value(snapshot))
 
+
+def task_content_fingerprint(frozen_task: FrozenTaskSpec) -> str:
+    """Fingerprint the meaningful content of a frozen exercise.
+
+    Excludes identity and lifecycle metadata so two otherwise
+    identical exercises receive the same fingerprint.
+    """
+
+    if not isinstance(frozen_task, FrozenTaskSpec):
+        raise TypeError("Expected FrozenTaskSpec")
+
+    task = frozen_task.to_payload()
+
+    # These fields do not change the exercise's learning content.
+    metadata_fields = {
+        "task_id",
+        "task_version",
+        "verification_status",
+        "human_review_status",
+    }
+
+    content = {
+        key: value
+        for key, value in task.items()
+        if key not in metadata_fields
+    }
+
+    encoded = json.dumps(
+        content,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def is_duplicate_task(
+    candidate: FrozenTaskSpec,
+    existing_tasks: list[FrozenTaskSpec],
+) -> bool:
+    """Detect exact-content duplicates among supplied exercises.
+
+    The caller must obtain existing tasks from trusted storage.
+    This is not semantic or similarity-based duplicate detection.
+    """
+
+    candidate_hash = task_content_fingerprint(candidate)
+
+    for existing in existing_tasks:
+        if task_content_fingerprint(existing) == candidate_hash:
+            return True
+
+    return False

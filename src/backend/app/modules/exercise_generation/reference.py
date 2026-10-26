@@ -1,12 +1,12 @@
 
-"""Private reference-solution candidate generation for exercises."""
+"""Private reference candidates for coding and non-coding exercises."""
 
-from collections.abc import Mapping
-from typing import Any, Protocol
 from pathlib import Path
+from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.exercise_generation.spec import FrozenTaskSpec
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReferenceGenerationError(RuntimeError):
@@ -14,11 +14,20 @@ class ReferenceGenerationError(RuntimeError):
 
 
 class ReferenceCandidateSchema(BaseModel):
-    """Internal schema for private reference-solution candidates."""
+    """Private reference solution for a coding exercise."""
 
     model_config = ConfigDict(extra="forbid")
 
     source_code: str = Field(min_length=1)
+    explanation: str = Field(min_length=1)
+
+
+class ModelAnswerSchema(BaseModel):
+    """Private model answer for a non-coding exercise."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer_text: str = Field(min_length=1)
     explanation: str = Field(min_length=1)
 
 
@@ -34,53 +43,51 @@ class ReferenceLLMGateway(Protocol):
     ) -> dict: ...
 
 
+def _load_prompt(filename: str) -> str:
+    prompt_path = (
+        Path(__file__).resolve().parents[4]
+        / "shared"
+        / "prompts"
+        / "exercise"
+        / filename
+    )
+
+    try:
+        return prompt_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ReferenceGenerationError(
+            "Reference generation prompt is unavailable"
+        ) from error
+
+
 async def generate_reference_candidate(
     frozen_task: FrozenTaskSpec,
     gateway: ReferenceLLMGateway,
     *,
     model_alias: str,
 ) -> dict[str, Any]:
-    """Generate a private candidate for a frozen exercise.
+    """Generate a private Python reference for a coding exercise."""
 
-    This function does not execute code, grade submissions,
-    verify correctness, or publish private artifacts.
-    """
     if not isinstance(frozen_task, FrozenTaskSpec):
         raise ReferenceGenerationError(
             "Reference generation requires a FrozenTaskSpec"
-        )       
+        )
 
-    prompt_path = (
-        Path(__file__).resolve().parents[4]
-        / "shared"
-        / "prompts"
-        / "exercise"
-        / "reference_v1.txt"
-    )
+    task = frozen_task.to_payload()
 
-    try:
-        system_prompt = prompt_path.read_text(encoding="utf-8")
-    except OSError as error:
+    if task.get("function_contract") is None:
         raise ReferenceGenerationError(
-            "Reference generation prompt is unavailable"
-        ) from error
+            "Coding reference requires a function contract"
+        )
 
-    # Convert the frozen mapping and nested tuples into JSON-safe data.
-    def thaw(value: Any) -> Any:
-        if isinstance(value, Mapping):
-            return {key: thaw(item) for key, item in value.items()}
-        if isinstance(value, tuple):
-            return [thaw(item) for item in value]
-        return value
-
-    task_payload = frozen_task.to_payload()
+    prompt = _load_prompt("reference_v1.txt")
 
     try:
         result = await gateway.generate_json(
             operation="exercise_reference_generation",
             model_alias=model_alias,
-            system_prompt=system_prompt,
-            payload={"task_spec": task_payload},
+            system_prompt=prompt,
+            payload={"task_spec": task},
             schema=ReferenceCandidateSchema,
         )
     except Exception as error:
@@ -93,6 +100,61 @@ async def generate_reference_candidate(
     except ValueError as error:
         raise ReferenceGenerationError(
             "Invalid reference candidate returned by AI"
+        ) from error
+
+    return candidate.model_dump()
+
+
+async def generate_model_answer_candidate(
+    frozen_task: FrozenTaskSpec,
+    gateway: ReferenceLLMGateway,
+    *,
+    model_alias: str,
+) -> dict[str, Any]:
+    """Generate a private written model answer for a non-coding task."""
+
+    if not isinstance(frozen_task, FrozenTaskSpec):
+        raise ReferenceGenerationError(
+            "Model-answer generation requires a FrozenTaskSpec"
+        )
+
+    task = frozen_task.to_payload()
+
+    if task.get("function_contract") is not None:
+        raise ReferenceGenerationError(
+            "Model-answer generation requires a non-coding task"
+        )
+
+    prompt = _load_prompt("model_answer_v1.txt")
+
+    payload = {
+        "task_id": task["task_id"],
+        "task_version": task["task_version"],
+        "assessment_stage": task["assessment_stage"],
+        "student_brief": task["student_brief"],
+        "requirements": task["requirements"],
+        "explanation_questions": task["explanation_questions"],
+        "outcome_ids": task["outcome_ids"],
+    }
+
+    try:
+        result = await gateway.generate_json(
+            operation="exercise_model_answer_generation",
+            model_alias=model_alias,
+            system_prompt=prompt,
+            payload=payload,
+            schema=ModelAnswerSchema,
+        )
+    except Exception as error:
+        raise ReferenceGenerationError(
+            "AI gateway failed during model-answer generation"
+        ) from error
+
+    try:
+        candidate = ModelAnswerSchema.model_validate(result)
+    except ValueError as error:
+        raise ReferenceGenerationError(
+            "Invalid model answer returned by AI"
         ) from error
 
     return candidate.model_dump()

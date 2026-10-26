@@ -8,6 +8,17 @@ It does not persist, verify, approve, or publish exercises.
 from dataclasses import dataclass
 from typing import Any
 
+from app.modules.exercise_generation.reference import (
+    generate_model_answer_candidate,
+)
+from app.modules.exercise_generation.tests import generate_rubric_candidate
+from app.modules.exercise_generation.spec import (
+    FrozenTaskSpec,
+    generate_task_spec_async,
+    freeze_task_spec,
+    is_duplicate_task,
+)
+from app.modules.exercise_generation.review import review_exercise_spec
 import hashlib
 import json
 from app.modules.exercise_generation.brief import validate_eligibility
@@ -24,6 +35,18 @@ from app.modules.exercise_generation.tests import (
 )
 
 
+class SemanticReviewBlocked(RuntimeError):
+    """An exercise cannot advance automatically after semantic review."""
+
+    def __init__(self, review_report: dict[str, Any]):
+        self.review_report = review_report
+        super().__init__(
+            f"Semantic review blocked: {review_report['decision']}"
+        )
+
+class DuplicateExerciseError(RuntimeError):
+    """An identical exercise already exists."""
+
 @dataclass
 class PreparedExercise:
     """Private worker-side result. Never return from a public API."""
@@ -31,6 +54,8 @@ class PreparedExercise:
     frozen_task: FrozenTaskSpec
     reference_candidate: dict[str, Any]
     test_candidates: dict[str, Any]
+    semantic_review_report: dict[str, Any] | None = None
+    rubric_candidate: dict[str, Any] | None = None
 
 
 async def prepare_exercise_candidates(
@@ -43,6 +68,7 @@ async def prepare_exercise_candidates(
     integration_outcome_skills: dict[str, Any],
     gateway: Any,
     model_alias: str,
+    existing_tasks: tuple[FrozenTaskSpec, ...],
 ) -> PreparedExercise:
     """Prepare exercise artifacts using approved curriculum inputs.
 
@@ -60,6 +86,7 @@ async def prepare_exercise_candidates(
         integration_outcome_skills=integration_outcome_skills,
     )
 
+
     # 2. Generate the student-facing specification.
     task = await generate_task_spec_async(
         brief,
@@ -68,29 +95,71 @@ async def prepare_exercise_candidates(
         model_alias=model_alias,
     )
 
-    # 3. Freeze the specification before producing grading artifacts.
+    # 3. Freeze the validated specification.
     frozen_task = freeze_task_spec(task, brief)
 
-    # 4. Generate a private reference candidate.
-    reference_candidate = await generate_reference_candidate(
+    # 4. Check exact duplicates before further AI generation.
+    if existing_tasks and is_duplicate_task(
+        frozen_task, list(existing_tasks)
+    ):
+        raise DuplicateExerciseError(
+            "An identical exercise already exists"
+        )
+
+    # 5. Independently review the frozen exercise.
+    semantic_review_report = await review_exercise_spec(
         frozen_task,
         gateway,
         model_alias=model_alias,
+        approved_outcome_context=approved_outcomes,
     )
 
-    # 5. Independently generate tests.
-    # The reference candidate is deliberately NOT provided.
-    test_candidates = await generate_test_candidates(
-        frozen_task,
-        gateway,
-        model_alias=model_alias,
-    )
+    if semantic_review_report["decision"] != "approved":
+        raise SemanticReviewBlocked(semantic_review_report)
+
+
+    # 6. Select the appropriate private reference and assessment path.
+    if task.get("function_contract") is None:
+        # Written-answer exercise: model answer and grading rubric.
+        reference_candidate = await generate_model_answer_candidate(
+            frozen_task,
+            gateway,
+            model_alias=model_alias,
+        )
+
+        test_candidates = {}
+
+        rubric_candidate = await generate_rubric_candidate(
+            frozen_task,
+            gateway,
+            model_alias=model_alias,
+        )
+    else:
+        # Coding exercise: Python reference and independent hidden tests.
+        reference_candidate = await generate_reference_candidate(
+            frozen_task,
+            gateway,
+            model_alias=model_alias,
+        )
+
+        test_candidates = await generate_test_candidates(
+            frozen_task,
+            gateway,
+            model_alias=model_alias,
+        )
+
+        rubric_candidate = None
+
+
 
     return PreparedExercise(
         frozen_task=frozen_task,
         reference_candidate=reference_candidate,
         test_candidates=test_candidates,
+        semantic_review_report=semantic_review_report,
+        rubric_candidate=rubric_candidate,
     )
+
 
 
 def build_artifact_manifest(prepared: PreparedExercise) -> dict[str, Any]:
@@ -141,5 +210,10 @@ def build_artifact_manifest(prepared: PreparedExercise) -> dict[str, Any]:
         ),
         "test_candidates_hash": fingerprint(
             prepared.test_candidates
+        ),
+        "rubric_candidate_hash": (
+            fingerprint(prepared.rubric_candidate)
+            if prepared.rubric_candidate is not None
+            else None
         ),
     }

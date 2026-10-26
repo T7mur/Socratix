@@ -2,11 +2,15 @@
 import pytest
 
 from app.modules.exercise_generation import worker
+from app.modules.exercise_generation.spec import (
+    freeze_task_spec,
+    is_duplicate_task,
+    task_content_fingerprint,
+)
 from app.modules.exercise_generation.worker import (
     PreparedExercise,
     build_artifact_manifest,
 )
-from app.modules.exercise_generation.spec import freeze_task_spec
 
 @pytest.fixture
 def worker_inputs():
@@ -22,7 +26,33 @@ def worker_inputs():
         "integration_outcome_skills": {},
         "gateway": object(),
         "model_alias": "test-model",
+        "existing_tasks": (),
     }
+
+
+@pytest.fixture(autouse=True)
+def mock_semantic_review(monkeypatch):
+    """Keep existing worker tests independent of the real AI reviewer."""
+
+    async def approved_review(
+        frozen_task, gateway, *, model_alias, approved_outcome_context
+    ):
+        return {
+            "decision": "approved",
+            "findings": ["No semantic issues detected."],
+            "requirements_aligned": True,
+            "outcomes_aligned": True,
+            "scope_respected": True,
+            "examples_consistent": True,
+
+        }
+
+    monkeypatch.setattr(
+        worker,
+        "review_exercise_spec",
+        approved_review,
+    )
+
 
 
 @pytest.mark.asyncio
@@ -37,7 +67,10 @@ async def test_worker_prepares_artifacts_in_order(
 
     async def fake_generate(*args, **kwargs):
         calls.append("generate")
-        return {"title": "Exercise"}
+        return {
+            "title": "Exercise",
+            "function_contract": {"name": "stock_status"},
+        }
 
     def fake_freeze(task, brief):
         calls.append("freeze")
@@ -54,8 +87,28 @@ async def test_worker_prepares_artifacts_in_order(
         assert task is frozen
         return {"test_cases": [{"expected": 1}]}
 
+
+    async def fake_review(
+        task, gateway, *, model_alias, approved_outcome_context
+    ):
+        calls.append("review")
+        assert task is frozen
+        return {
+            "decision": "approved",
+            "findings": ["Exercise is consistent."],
+            "requirements_aligned": True,
+            "outcomes_aligned": True,
+            "scope_respected": True,
+            "examples_consistent": True,
+        }
+
+
+
     monkeypatch.setattr(
         worker, "validate_eligibility", fake_validate
+    )
+    monkeypatch.setattr(
+        worker, "review_exercise_spec", fake_review
     )
     monkeypatch.setattr(
         worker, "generate_task_spec_async", fake_generate
@@ -78,6 +131,7 @@ async def test_worker_prepares_artifacts_in_order(
         "validate",
         "generate",
         "freeze",
+        "review",
         "reference",
         "tests",
     ]
@@ -120,7 +174,10 @@ async def test_worker_stops_when_reference_generation_fails(
 
     async def fake_generate(*args, **kwargs):
         calls.append("generate")
-        return {"title": "Exercise"}
+        return {
+    "title": "Exercise",
+    "function_contract": {"name": "stock_status"},
+}
 
     def fake_freeze(task, brief):
         calls.append("freeze")
@@ -157,7 +214,10 @@ async def test_worker_does_not_return_partial_artifacts_when_tests_fail(
 
     async def fake_generate(*args, **kwargs):
         calls.append("generate")
-        return {"title": "Exercise"}
+        return {
+    "title": "Exercise",
+    "function_contract": {"name": "stock_status"},
+}
 
     def fake_freeze(task, brief):
         calls.append("freeze")
@@ -306,4 +366,291 @@ def test_artifact_manifest_does_not_expose_private_content():
         "task_spec_hash",
         "reference_candidate_hash",
         "test_candidates_hash",
+        "rubric_candidate_hash",
     }
+
+    # Coding exercises do not have a non-coding grading rubric.
+    assert manifest["rubric_candidate_hash"] is None
+
+
+def test_identical_task_has_same_content_fingerprint():
+    first = make_prepared_exercise().frozen_task
+    second = make_prepared_exercise().frozen_task
+
+    assert (
+        task_content_fingerprint(first)
+        == task_content_fingerprint(second)
+    )
+
+
+def test_duplicate_task_is_detected():
+    candidate = make_prepared_exercise().frozen_task
+    existing = make_prepared_exercise().frozen_task
+
+    assert is_duplicate_task(candidate, [existing]) is True
+
+
+def test_no_duplicate_when_existing_list_is_empty():
+    candidate = make_prepared_exercise().frozen_task
+
+    assert is_duplicate_task(candidate, []) is False
+
+
+def test_mutable_task_cannot_be_fingerprinted():
+    with pytest.raises(TypeError, match="FrozenTaskSpec"):
+        task_content_fingerprint(
+            {"title": "Unfrozen task"}
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decision",
+    ["review_required", "rejected"],
+)
+async def test_worker_stops_when_semantic_review_blocks(
+    monkeypatch, worker_inputs, decision
+):
+    calls = []
+    frozen = object()
+
+    def fake_validate(*args, **kwargs):
+        calls.append("validate")
+
+    async def fake_generate(*args, **kwargs):
+        calls.append("generate")
+        return {
+    "title": "Exercise",
+    "function_contract": {"name": "stock_status"},
+}
+
+    def fake_freeze(task, brief):
+        calls.append("freeze")
+        return frozen
+
+    async def fake_review(
+        task, gateway, *, model_alias, approved_outcome_context
+    ):
+        calls.append("review")
+        assert task is frozen
+        return {
+            "decision": decision,
+            "findings": ["Exercise requires further examination."],
+            "requirements_aligned": False,
+            "outcomes_aligned": False,
+            "scope_respected": True,
+            "examples_consistent": True,
+        }
+
+    async def fake_reference(*args, **kwargs):
+        pytest.fail(
+            "Reference generation must not run after blocked review"
+        )
+
+    async def fake_tests(*args, **kwargs):
+        pytest.fail(
+            "Hidden-test generation must not run after blocked review"
+        )
+
+    monkeypatch.setattr(worker, "validate_eligibility", fake_validate)
+    monkeypatch.setattr(worker, "generate_task_spec_async", fake_generate)
+    monkeypatch.setattr(worker, "freeze_task_spec", fake_freeze)
+    monkeypatch.setattr(worker, "review_exercise_spec", fake_review)
+    monkeypatch.setattr(
+        worker, "generate_reference_candidate", fake_reference
+    )
+    monkeypatch.setattr(
+        worker, "generate_test_candidates", fake_tests
+    )
+
+    with pytest.raises(
+        worker.SemanticReviewBlocked,
+        match="Semantic review blocked",
+    ) as error:
+        await worker.prepare_exercise_candidates(**worker_inputs)
+
+    assert error.value.review_report["decision"] == decision
+
+    assert calls == [
+        "validate",
+        "generate",
+        "freeze",
+        "review",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_duplicate_before_private_generation(
+    monkeypatch, worker_inputs
+):
+    existing = make_prepared_exercise().frozen_task
+
+    def fake_validate(*args, **kwargs):
+        pass
+
+    async def fake_generate(*args, **kwargs):
+        return {"title": "Duplicate"}
+
+    def fake_freeze(task, brief):
+        return existing
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("Pipeline must stop after duplicate detection")
+
+    monkeypatch.setattr(
+        worker, "validate_eligibility", fake_validate
+    )
+    monkeypatch.setattr(
+        worker, "generate_task_spec_async", fake_generate
+    )
+    monkeypatch.setattr(
+        worker, "freeze_task_spec", fake_freeze
+    )
+    monkeypatch.setattr(
+        worker, "review_exercise_spec", forbidden
+    )
+    monkeypatch.setattr(
+        worker, "generate_reference_candidate", forbidden
+    )
+    monkeypatch.setattr(
+        worker, "generate_test_candidates", forbidden
+    )
+
+    with pytest.raises(
+        worker.DuplicateExerciseError,
+        match="identical exercise",
+    ):
+        await worker.prepare_exercise_candidates(
+            **{
+                **worker_inputs,
+                "existing_tasks": (existing,),
+            }
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_coding", [True, False])
+async def test_worker_selects_correct_assessment_path(
+    monkeypatch, worker_inputs, is_coding
+):
+    calls = []
+    frozen = object()
+
+    def fake_validate(*args, **kwargs):
+        calls.append("validate")
+
+    async def fake_generate(*args, **kwargs):
+        calls.append("generate")
+        return {
+            "title": "Example exercise",
+            "function_contract": (
+                {"name": "solve"} if is_coding else None
+            ),
+        }
+
+    def fake_freeze(task, brief):
+        calls.append("freeze")
+        return frozen
+
+    async def fake_review(
+        task, gateway, *, model_alias, approved_outcome_context
+    ):
+        calls.append("review")
+        return {"decision": "approved"}
+
+    async def fake_reference(*args, **kwargs):
+        calls.append("coding_reference")
+        return {"source_code": "def solve(): return 1"}
+
+    async def fake_model_answer(*args, **kwargs):
+        calls.append("model_answer")
+        return {"answer_text": "Explanation of the concept."}
+
+    async def fake_tests(*args, **kwargs):
+        calls.append("hidden_tests")
+        return {"test_cases": [{"args": [], "expected": 1}]}
+
+    async def fake_rubric(*args, **kwargs):
+        calls.append("rubric")
+        return {
+            "criteria": [
+                {"requirement_id": "R1", "max_points": 5}
+            ]
+        }
+
+    monkeypatch.setattr(worker, "validate_eligibility", fake_validate)
+    monkeypatch.setattr(worker, "generate_task_spec_async", fake_generate)
+    monkeypatch.setattr(worker, "freeze_task_spec", fake_freeze)
+    monkeypatch.setattr(worker, "review_exercise_spec", fake_review)
+    monkeypatch.setattr(
+        worker, "generate_reference_candidate", fake_reference
+    )
+    monkeypatch.setattr(
+        worker, "generate_model_answer_candidate", fake_model_answer
+    )
+    monkeypatch.setattr(
+        worker, "generate_test_candidates", fake_tests
+    )
+    monkeypatch.setattr(
+        worker, "generate_rubric_candidate", fake_rubric
+    )
+
+    result = await worker.prepare_exercise_candidates(**worker_inputs)
+
+    if is_coding:
+        assert calls == [
+            "validate",
+            "generate",
+            "freeze",
+            "review",
+            "coding_reference",
+            "hidden_tests",
+        ]
+        assert "source_code" in result.reference_candidate
+        assert result.test_candidates["test_cases"]
+        assert result.rubric_candidate is None
+
+    else:
+        assert calls == [
+            "validate",
+            "generate",
+            "freeze",
+            "review",
+            "model_answer",
+            "rubric",
+        ]
+        assert "answer_text" in result.reference_candidate
+        assert result.test_candidates == {}
+        assert result.rubric_candidate["criteria"]
+
+def test_artifact_manifest_tracks_rubric_changes():
+    from dataclasses import replace
+
+    prepared = make_prepared_exercise()
+
+    with_rubric = replace(
+        prepared,
+        rubric_candidate={
+            "criteria": [
+                {"requirement_id": "R1", "max_points": 5}
+            ]
+        },
+    )
+
+    changed_rubric = replace(
+        prepared,
+        rubric_candidate={
+            "criteria": [
+                {"requirement_id": "R1", "max_points": 10}
+            ]
+        },
+    )
+
+    first = worker.build_artifact_manifest(with_rubric)
+    second = worker.build_artifact_manifest(changed_rubric)
+
+    assert first["rubric_candidate_hash"] is not None
+    assert first["rubric_candidate_hash"] != second["rubric_candidate_hash"]
+
+    assert first["task_spec_hash"] == second["task_spec_hash"]
+    assert first["reference_candidate_hash"] == second["reference_candidate_hash"]

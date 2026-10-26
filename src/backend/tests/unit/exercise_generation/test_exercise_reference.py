@@ -1,7 +1,9 @@
 
 import pytest
 
-
+from app.modules.exercise_generation.reference import (
+    generate_model_answer_candidate,
+)
 from app.modules.exercise_generation.spec import freeze_task_spec
 from app.modules.exercise_generation.reference import (
     ReferenceGenerationError,
@@ -127,6 +129,77 @@ async def test_reference_rejects_mutable_task():
     ):
         await generate_reference_candidate(
             {"title": "Mutable exercise"},
+            MockGateway(),
+            model_alias="test-model",
+        )
+
+
+@pytest.mark.asyncio
+async def test_noncoding_model_answer_generation():
+    from types import MappingProxyType
+    from app.modules.exercise_generation.spec import FrozenTaskSpec
+
+    task = FrozenTaskSpec(
+        data=MappingProxyType({
+            "task_id": "550e8400-e29b-41d4-a716-446655440004",
+            "task_version": 1,
+            "assessment_stage": "understanding",
+            "student_brief": "Explain how an if statement works.",
+            "function_contract": None,
+            "requirements": [
+                {
+                    "requirement_id": "R1",
+                    "description": "Explain conditional execution",
+                }
+            ],
+            "explanation_questions": [
+                "When does an if block execute?"
+            ],
+            "outcome_ids": [
+                "python.conditionals.understanding.v1"
+            ],
+        })
+    )
+
+    class MockGateway:
+        async def generate_json(self, **kwargs):
+            assert (
+                kwargs["operation"]
+                == "exercise_model_answer_generation"
+            )
+            assert "source_code" not in kwargs["payload"]
+
+            return {
+                "answer_text": (
+                    "An if block executes when its condition is true."
+                ),
+                "explanation": (
+                    "The Boolean condition controls execution."
+                ),
+            }
+
+    result = await generate_model_answer_candidate(
+        task,
+        MockGateway(),
+        model_alias="test-model",
+    )
+
+    assert "answer_text" in result
+    assert "source_code" not in result
+
+
+@pytest.mark.asyncio
+async def test_model_answer_rejects_coding_task(frozen_task):
+    class MockGateway:
+        async def generate_json(self, **kwargs):
+            pytest.fail("AI must not run for coding tasks")
+
+    with pytest.raises(
+        ReferenceGenerationError,
+        match="non-coding task",
+    ):
+        await generate_model_answer_candidate(
+            frozen_task,
             MockGateway(),
             model_alias="test-model",
         )
