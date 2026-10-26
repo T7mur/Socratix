@@ -6,62 +6,6 @@ window.SAMPLE = {
   student: { name: "Sam Rivera", initials: "SR", course: "Informatics 1 — Python" },
   instructor: { name: "Dr. A. Moreno", initials: "AM" },
 
-  // ConfirmedPlan (+ original goal text)
-  plan: {
-    plan_id: "9d1c…e2",
-    text: "I want to make a terminal café ordering app next week",
-    time_horizon: "week",
-    confirmed_skill_ids: ["python.loops", "python.conditionals"],
-    confirmed_at: "2026-10-23T12:00:00Z",
-    active: true,
-  },
-
-  // PlanTagProposal for the plan screen
-  planProposal: {
-    candidate_tags: [
-      { skill_id: "python.loops", confidence_label: "high", provenance: "model_suggested", reason: "Repeated interaction", quote: "ordering app" },
-      { skill_id: "python.conditionals", confidence_label: "medium", provenance: "model_suggested", reason: "Menu choices branch on the user's selection", quote: "ordering" },
-      { skill_id: "python.input_validation", confidence_label: "medium", provenance: "model_suggested", reason: "A terminal app reads typed input that may be malformed", quote: "terminal" },
-      { skill_id: "python.lists", confidence_label: "low", provenance: "model_suggested", reason: "Plausible prerequisite: an order is a collection of items", quote: "café ordering" },
-    ],
-    unmapped_phrases: ["terminal café ordering app"],
-    requires_student_confirmation: true,
-  },
-
-  // SelectorResult
-  selection: {
-    selection_id: "5b7a…0f",
-    policy_version: "selector-v1",
-    weights: { planning: 0.40, gap: 0.35, retention: 0.25 },
-    ranked_targets: [
-      {
-        skill_ids: ["python.loops", "python.conditionals"],
-        activity_type: "multi_skill_exercise",
-        priority_score: 0.72,
-        features: { P: 1.0, G: 0.6, R: 0.44 }, // 0.40·1.0 + 0.35·0.6 + 0.25·0.44 = 0.72
-        reasons: ["planning match", "recent transfer difficulty"],
-        explanation: "Your confirmed plan names loops; your last conditionals transfer attempt failed a boundary case.",
-        override_allowed: true,
-      },
-      {
-        skill_ids: ["python.input_validation"],
-        activity_type: "single_skill_exercise",
-        priority_score: 0.495,
-        features: { P: 0.2, G: 0.9, R: 0.4 },
-        reasons: ["suspected gap", "related to plan"],
-        override_allowed: true,
-      },
-      {
-        skill_ids: ["python.lists", "python.loops", "python.conditionals"],
-        activity_type: "project",
-        priority_score: 0.405,
-        features: { P: 0.5, G: 0.3, R: 0.4 },
-        reasons: ["project goal", "integration practice"],
-        override_allowed: true,
-      },
-    ],
-  },
-
   // Approved skill graph (+ one proposed edge under review)
   skills: [
     { skill_id: "python.variables", name: "Variables", description: "Name and update values", approval_status: "approved", x: 0, y: 150 },
@@ -105,19 +49,80 @@ window.SAMPLE = {
     { skill_id: "python.variables", due: "Wed 12 Nov", reason: "21-day spaced check", kind: "later" },
   ],
 
-  recent: [
-    { title: "List total", activity: "single_skill_exercise", stage: "transfer", skills: ["python.loops", "python.lists"], result: "In progress", status: "neutral", help: "None", independent: null, when: "Today 10:42", href: "#/practice/list-total" },
-    { title: "Campus Café Terminal · M3", activity: "project", stage: "transfer", skills: ["python.input_validation", "python.loops"], result: "In progress", status: "neutral", help: "None", independent: null, when: "Yesterday", href: "#/projects/cafe-terminal" },
-    { title: "Loop recall check", activity: "single_skill_exercise", stage: "recall", skills: ["python.loops"], result: "Rubric met", status: "pass", help: "None", independent: true, when: "Thu 23 Oct", href: "#/skills" },
-    { title: "Predict the output: comparisons", activity: "single_skill_exercise", stage: "understanding", skills: ["python.comparisons"], result: "Rubric met", status: "pass", help: "Hint level 1", independent: false, when: "Wed 22 Oct", href: "#/skills" },
-  ],
+
+  // ---------- Planning (planning_ui.md v2 + planning_execution_plan.md §7) ----------
+  // What the server would return for a seeded demo student. Busy-time labels are NOT here:
+  // they live only in the browser (localStorage), the server keeps times.
+  planning: {
+    today: "2026-10-26",                      // Monday
+    student: { nickname: "quiet-otter", recovery: "river-maple-quiet-42", path: "beginner",
+      recent: [false, true, true, false, true] }, // last 5 counted plans, oldest first: 3 on target
+    config: { N_PLANS: 5, BEST_OF: 4, QUALITY_MIN: 4, COMPLETION_MIN: 0.7, STEP_BACK_AFTER: 3, BUFFER_MIN: 0.15, MAX_TASK_MIN: 90, MILESTONE_BUFFER_DAYS: 2, ASK_PER_DAY: 5, MAX_REVIEWS_PER_PLAN: 2 },
+    setup: {
+      window: { start: "09:00", end: "21:00" },
+      updated: "Mon 19 Oct",
+      deadlines: [
+        { id: "d1", course: "INF2", item: "Coursework 2", date: "2026-11-09", time: "14:00" },
+        { id: "d2", course: "LA1", item: "Midterm", date: "2026-11-05", time: "10:00" },
+        { id: "d3", course: "INF1A", item: "Tutorial sheet 5", date: "2026-10-28", time: "10:00" },
+      ],
+      classes: [
+        { id: "c1", day: 1, start: "11:00", end: "12:00", name: "INF2 lecture" },
+        { id: "c2", day: 2, start: "09:00", end: "11:00", name: "INF1A lecture" },
+        { id: "c3", day: 2, start: "14:00", end: "17:00", name: "INF2 lab" },
+        { id: "c4", day: 3, start: "11:00", end: "12:00", name: "INF2 lecture" },
+        { id: "c5", day: 3, start: "14:00", end: "16:00", name: "LA1 tutorial" },
+        { id: "c6", day: 4, start: "09:00", end: "11:00", name: "INF1A lecture" },
+        { id: "c7", day: 4, start: "14:00", end: "16:00", name: "LA1 lecture" },
+        { id: "c8", day: 5, start: "10:00", end: "12:00", name: "LA1 lecture" },
+      ],
+      busy: [   // times only; day 0 = Sunday … 6 = Saturday
+        { id: "b1", days: [2, 3, 4, 5], start: "17:00", end: "21:00" },
+        { id: "b2", days: [6], start: "10:00", end: "18:00" },
+        { id: "b3", days: [0], start: "12:00", end: "18:00" },
+      ],
+      busyLabelsSeed: { b1: "Café shift", b2: "Café shift", b3: "Family lunch" },
+    },
+    milestones: [
+      { id: "m1", deadline: "d1", name: "Lab 3 submitted", date: "2026-10-30", hours: 6 },
+      { id: "m2", deadline: "d1", name: "Draft report", date: "2026-11-04", hours: 50 },
+      { id: "m3", deadline: "d1", name: "Final checks", date: "2026-11-06", hours: 8 },
+      { id: "m4", deadline: "d2", name: "Revision notes ch. 1–4", date: "2026-10-23", hours: 4 },
+      { id: "m5", deadline: "d2", name: "Past paper 1 done", date: "2026-10-30", hours: 3 },
+      { id: "m6", deadline: "d2", name: "Past papers 2–3 done", date: "2026-11-03", hours: 8 },
+    ],
+    // §9 test fixture: starts at 3/5, reaches 5/5 when both suggestions are resolved
+    tasks: [
+      { id: "t1", text: "Finish INF2 lab 3, Q1–4", time: "10:00", mins: 60, where: "" },
+      { id: "t2", text: "Revise lecture 5", time: "13:00", mins: 45, where: "" },
+      { id: "t3", text: "Past paper 1, all questions", time: "17:00", mins: 40, where: "Library" },
+    ],
+    // closed plans, oldest first (completion in %, null = off day); today is appended at check-in
+    history: [
+      { date: "2026-10-12", completion: 67 }, { date: "2026-10-13", completion: 100 }, { date: "2026-10-14", completion: 50 },
+      { date: "2026-10-15", completion: 75 }, { date: "2026-10-16", completion: null }, { date: "2026-10-17", completion: 33 },
+      { date: "2026-10-18", completion: 80 }, { date: "2026-10-19", completion: 100 }, { date: "2026-10-20", completion: 60 },
+      { date: "2026-10-21", completion: 75 }, { date: "2026-10-22", completion: 100 }, { date: "2026-10-23", completion: 67 },
+      { date: "2026-10-24", completion: null }, { date: "2026-10-25", completion: 80 },
+    ],
+    // "took" ratings of ticked tasks in the last 14 days, by task type
+    ratings: { coding: ["more", "much_more", "as_planned", "more"], reading: ["as_planned", "less", "as_planned"], maths: ["more", "as_planned"] },
+    // mock ELM responses (E2 questions, E4 suggestion, E5 answers)
+    e2: {
+      d1: ["Which parts of Coursework 2 depend on Lab 3?", "What would a finished draft look like the week before?", "Who could read your draft before the final checks?"],
+      d2: ["Which chapters come up most often in past papers?", "When will you do a paper under timed conditions?"],
+    },
+    e2Generic: ["What must be finished first?", "What could go wrong?", "What would \"done\" look like a week before?"],
+    e4: { concept: "Recursion on lists", text: "2 recursion exercises on lists", mins: 30, time: "16:00", link: { kind: "exercise", ref: "hs-length" } },
+    askUsed: 2,
+  },
 
   // ---------- Practice (practice_spec.md v1 + practice_ui_structure.md v1.0) ----------
   // Student-safe fields only: id, type, concept_ids, statement, starter, visible_checks, hints{H0,H1,H3}, last_step, source.
   // Solutions, hidden-check generators and rubrics are server-only (see SERVER in practice.js, simulated).
   practice: {
     config: { STUCK_UNLOCK_MIN: 5, GLOW_SAME_FAILURE: 3, GLOW_MIN: 10, H4_HIGHLIGHT_AFTER: 2, HIDDEN_CHECKS_PER_HOUR: 10, SPACING_DAYS: [2, 7, 21], MIXED_MIN_CONCEPTS: 2, MIXED_MAX_ITEMS: 3, UPLOADS_PER_DAY: 3, N_SESSIONS: 3 },
-    planTask: { id: "t-loops", title: "Practise loops & lists (30 min)" },
+    planTask: null, // plan tasks come from Planning (SX.planTask)
     subjects: [
       { id: "python", name: "Python", note: "Main practice language" },
       { id: "la", name: "Linear Algebra 1" },

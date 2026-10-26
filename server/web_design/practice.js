@@ -356,7 +356,7 @@ window.PracticeModule = (SX) => {
             <h2 id="cont-h">${esc(cont.title)} <span class="faint" style="font-weight:400">· ${subj(cont.subject).name}</span></h2>
             <div class="small muted">${levelText(cs.level)} · draft saved ${cs.runs ? `after run ${cs.runs}` : "on this device"}</div>
           </div>
-          <a class="btn btn-primary" href="#/practice/${cont.id}?task=${P.planTask.id}">${icon("arrow-right")}Continue</a>
+          <a class="btn btn-primary" href="#/practice/${cont.id}">${icon("arrow-right")}Continue</a>
         </div>
       </section>` : ""}
 
@@ -519,7 +519,7 @@ window.PracticeModule = (SX) => {
     if (st.paneItem !== item.id) { st.paneItem = item.id; st.pane = "work"; }
     return `
     <div class="solve-head" data-region="head">${solveHead(item, s)}</div>
-    ${q.task ? `<div class="tiny faint task-link">${icon("calendar-check")}Opened from your plan: “${esc(P.planTask.title)}”. Finishing ticks it.</div>` : ""}
+    ${q.task ? `<div class="tiny faint task-link">${icon("calendar-check")}Opened from your plan: “${esc((SX.planTask && SX.planTask(q.task) || {}).title || "plan task")}”. Finishing ticks it.</div>` : ""}
     <section class="panel task-panel" aria-labelledby="task-h">
       <div class="panel-head"><h2 id="task-h">Task</h2>
         <button class="btn btn-ghost btn-sm" type="button" data-p="task-toggle" aria-expanded="${s.taskOpen}" aria-controls="task-body">${icon(s.taskOpen ? "chevron-up" : "chevron-down")}${s.taskOpen ? "Hide task" : "Show task"}</button></div>
@@ -786,7 +786,7 @@ ${paneTabs(s)}</div>
         <div><div class="tiny faint">${esc(item.title)} · ${esc(subj(item.subject).name)}</div>
           <h1>${expl ? "Looks complete (AI feedback)" : own ? "Solved on your own" : "Solved with hints"}</h1>
           <p class="small muted">${expl ? "Labelled AI feedback. It doesn't count as verified or on your own." : own ? (s.maxLevel === 1 ? "You used up to H1. Pointers to where to look still count as on your own." : "No hints needed.") : `Highest hint level used: H${s.maxLevel} (${LEVEL[s.maxLevel]}). Hints are part of learning. The quick challenge below shows it stuck.`}</p>
-          ${q.task ? `<p class="small task-ticked">${icon("calendar-check")}Plan task “${esc(P.planTask.title)}” ticked.</p>` : ""}
+          ${q.task ? `<p class="small task-ticked">${icon("calendar-check")}Plan task “${esc((SX.planTask && SX.planTask(q.task) || {}).title || "plan task")}” ticked.</p>` : ""}
         </div>
       </section>
 
@@ -817,7 +817,7 @@ ${paneTabs(s)}</div>
       </div></section>` : `<div class="row"><a class="btn btn-primary" href="#/practice">${icon("arrow-left")}Back to Practice</a></div>`}
 
       <p class="tiny faint">Want to talk it through? <a href="#/practice" data-toast="Opens InfBase in the real app.">InfBase</a> · <a href="#/practice" data-toast="Opens InfPALS in the real app.">InfPALS</a> · <a href="#/practice" data-toast="Opens the course forum in the real app.">course forum</a></p>
-      <p class="tiny faint mono">activity_completed · activity_type: exercise · item_type: ${item.type} · max_hint_level: ${Math.max(0, s.maxLevel)} · verified: ${!expl}${q.task ? ` · plan_task_id: ${P.planTask.id}` : ""}</p>
+      <p class="tiny faint mono">activity_completed · activity_type: exercise · item_type: ${item.type} · max_hint_level: ${Math.max(0, s.maxLevel)} · verified: ${!expl}${q.task ? ` · plan_task_id: ${esc(q.task)}` : ""}</p>
       <details class="panel proto"><summary class="small muted">Prototype only</summary><div class="row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-p="toggle-predict" aria-pressed="${st.predict}">Show “Predict the output” (triggered when your answer differs from ours on a random input)</button>${simButtons(["elm"])}</div></details>
     </div>`;
   }
@@ -1081,6 +1081,7 @@ ${paneTabs(s)}</div>
         if (item.type !== "explanation") item._status = s.maxLevel >= 2 ? "solved_with_hints" : "solved_on_own";
         patch("actions", "status", "output", "examples", "head", "help");
         await sleep(1200); if (!alive()) return;
+        SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
         location.hash = `#/practice/${item.id}/done${parts.query.task ? `?task=${parts.query.task}` : ""}`;
         return;
       }
@@ -1162,7 +1163,8 @@ ${paneTabs(s)}</div>
       s.solved = true; item._status = "solved_with_hints"; s.fresh = "out";
       patch("input", "output", "status", "actions", "head", "help", "examples");
       await sleep(1100); if (!alive()) return;
-      location.hash = `#/practice/${item.id}/done${parts.query.task ? `?task=${parts.query.task}` : ""}`;
+      SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
+        location.hash = `#/practice/${item.id}/done${parts.query.task ? `?task=${parts.query.task}` : ""}`;
     }
 
     // --- challenges ---
