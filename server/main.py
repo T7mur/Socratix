@@ -15,6 +15,7 @@ from typing import List, Optional
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel
 from pypdf import PdfReader
@@ -270,3 +271,11 @@ DEV_PAGE = """<!doctype html>
 @app.get("/dev", response_class=HTMLResponse)
 def dev_page():
     return DEV_PAGE
+
+
+# 11) Design prototype: static pages with sample data only (no secrets, no API calls)
+app.mount(
+    "/design",
+    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "web_design"), html=True),
+    name="design",
+)
