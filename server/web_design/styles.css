@@ -511,6 +511,9 @@ table.data th:last-child, table.data td:last-child { padding-right: 0; }
   min-height: 100%; width: 100%; border: 0; letter-spacing: 0;
 }
 .code-stack pre { pointer-events: none; color: var(--ink); }
+/* Highlight layer must match the textarea glyph-for-glyph or the caret drifts */
+.code-stack pre code { font: inherit; font-size: inherit; }
+.code-stack pre, .code-stack textarea, .code-stack pre * { font-feature-settings: normal; font-variant-ligatures: none; font-kerning: none; font-style: normal; }
 .code-stack textarea {
   position: absolute; inset: 0; resize: none; background: transparent;
   color: transparent; caret-color: var(--focus); outline: none; overflow: hidden;
