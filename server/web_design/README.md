@@ -12,11 +12,16 @@ A clickable, static design prototype for the student workspace and the instructo
 | Screen | Hash route | Spec route |
 |---|---|---|
 | Sign in | `#/login` | `/login` |
-| Dashboard | `#/dashboard` | `/dashboard` |
-| Plan | `#/plan` | `/plan` |
+| Today (planning cards) | `#/` | `/` |
+| Evening check-in (sheet over Today) | `#/?checkin=1` | `/?checkin=1` |
+| Plan landing | `#/plan` | `/plan` |
+| Setup | `#/plan/setup` | `/plan/setup` |
+| Backward planning | `#/plan/milestones` | `/plan/milestones` |
+| Daily wizard | `#/plan/today/1` … `#/plan/today/4` | `/plan/today/1` … `/4` |
+| Progress (planning section) | `#/progress` | `/progress` |
 | Skills (graph + list) | `#/skills` | `/skills` |
 | Practice landing | `#/practice` | `/practice` |
-| Solve screen | `#/practice/list-total` (`?task=t-loops` from a plan task) | `/practice/:itemId` |
+| Solve screen | `#/practice/list-total` (`?task=<plan task id>` from a plan task) | `/practice/:itemId` |
 | Wrap-up | `#/practice/list-total/done` | `/practice/:itemId/done` |
 | Quick challenge | `#/practice/challenge/list-product` | `/practice/challenge/:itemId` |
 | Mixed challenge | `#/practice/mixed/mx-1` | `/practice/mixed/:setId` |
@@ -32,6 +37,7 @@ A clickable, static design prototype for the student workspace and the instructo
 - `styles.css`: design tokens and components (dark canvas, thin off-white outlines, stage/state colours)
 - `data.js`: sample data shaped with `shared_contracts.md` v1.0 field names (`SelectorResult`, `TaskSpec`, `ProjectSpec`, `HintResponse`, `SkillEstimate`, …)
 - `app.js`: hash router, screens, and simulated interactions (jobs, confirmations, review decisions)
+- `planning.js`: Today, Plan, Setup, Milestones, the 4-step wizard, evening check-in, Progress and the planning parts of Settings. A simulated server applies the planning rules (planning_execution_plan.md §7) and mocks the ELM calls E1–E5
 - `practice.js`: the Practice area (exercises). A simulated server owns the hint rules and checking, so the screens behave like the spec; solutions and hidden values never sit in `data.js`
 
 ## Verification against the project design documents
@@ -42,14 +48,33 @@ Each item was checked against the spec text and exercised in a headless Chrome p
 
 | # | Requirement | Where in the prototype |
 |---|---|---|
-| 1 | Typed plan → proposed tags → student confirms/rejects; only confirmed IDs reach the selector | Plan: checkboxes, *Reject all*, *Confirm N tags* (disabled at 0), "Only confirmed tags reach the selector" |
-| 2 | Recommendation shows weighted reasons, policy version and override; ranking ≠ AI always right | Dashboard: 0.40/0.35/0.25 diagram, `selector-v1`, *Choose something else* → Start anyway / Integrated prep / Quick diagnostic, alternatives with *Choose* |
+| 1–2 | Plan tags and selector recommendation | Superseded by `planning_ui.md` v2 (see Planning below); the goal → skill-tags screen and the selector dashboard were replaced |
 | 3 | Verified test evidence + graded hints | Superseded for exercises by `practice_spec.md`: hints H0–H4, never the full solution; the model answer appears only after solving (see Practice below) |
 | 4 | Untrusted content renders safely; no hidden graders in payloads | All text is HTML-escaped; `data.js` has no reference solutions or hidden tests; note says hidden tests are never shown |
 | 5 | Async pending/success/failure/review-required states, no frozen spinner | Generation job and grading job step through `queued → running → succeeded`; *Prototype only* panel previews grader unavailable (503) and uncertain test |
 | 6 | Students can't reach instructor review by URL | `#/review` as student shows "Instructor access required", explained as a server-side check |
-| 7 | E2E: plan → select → exercise → run → hint → revise → wrap-up | Dashboard *Continue practice* → List total (Run, H0 → H1 → H2, fix) → wrap-up ticks the plan task → quick challenge |
+| 7 | E2E: plan → exercise → run → hint → revise → wrap-up | Plan (Path 2) → suggested practice task → *Practise* → solve → wrap-up → the plan task is ticked automatically |
 | 8 | Project milestones + late change request, no forced architecture | Project: M1–M6 DAG with dependencies, M6 change request, "Your design, not ours", only the CLI protocol is fixed |
+
+### Planning: planning_ui.md §20 acceptance checklist
+
+Screens follow `planning_ui.md` v2; rules follow `planning_execution_plan.md` §7 (`planning_spec.md` v5 wasn't available). The Welcome screen (§3, nickname + recovery code) is deferred to the sign-in work on `/login`. Checked with Playwright at 360 px and 1280 px, light and dark: 81 checks, no console errors, no horizontal overflow, none of the banned words (*fail, wrong, weak, bad, demoted*) on screen.
+
+| Requirement | Where in the prototype |
+|---|---|
+| Setup → steps 1–4 → evening at 360 and 1280, light and dark | Today *Plan your day* → Step 1 (Read it, busy, priority) → Step 2 → Step 3 → Submit → Step 4 → (clock 18:30) Today *Check in* |
+| Paste text → E1 preview → nothing saved until **Save all** | Setup › Deadlines › *Paste text* → *Read it* → editable rows with Keep/Remove; the saved list changes only on *Save all*; nothing found → "Couldn't read that. Fill it in instead." and the Fill in tab |
+| Cramming warning when a week's hours exceed free time | Milestones: "Week of 2 Nov: 42 h planned, 39 h free. Spread it out?" plus planned-vs-free bars; buffer and order panels with *Sort by date* |
+| Fixture starts at 3/5, reaches 5/5 after both suggestions are resolved | Step 3: *Use this wording* → 4/5, *Split it* → 5/5 (live, `aria-live`) |
+| Worked example only on the weakest task, Path 1 only | One WORKED EXAMPLE box on "Revise lecture 5"; none on Path 2 |
+| ELM down → every task "Couldn't check", Submit still works | *Prototype only → ELM down*: every card offers Accept / Edit; Submit saves the plan |
+| Move only before the planned time; Off day excludes the plan | *Move* disappears once the clock passes a task; *Off day* → notice + *Undo*, and the check-in says "Off day: this plan is not counted." |
+| Evening chips: no default; **All as planned** fills; Save disabled until all set | Evening sheet |
+| 5th qualifying plan unlocks; next day starts at Step 2 | The seeded student has 3 of 5 on target; an on-target check-in shows the unlock message; *Simulate next day* → Plan opens at Step 2 ("Competent path") |
+| No secret in the bundle | `server/web_design/` holds sample data only |
+| Keyboard-only flow | Every control is a real button/input; tested Step 1 → 2 → 3 with the keyboard |
+
+Also: Path 2 light review with a once-only *Full feedback*; the E4 suggestion card on Today (*Add / Edit / Skip*); *Practise* deep links that auto-tick when the exercise is solved; `.ics` download; optimistic ticks that roll back with "Couldn't reach the server…" (*Prototype only → Network error*); "Waking up the server…" after 3 s; busy-time labels kept only in this browser. Dates use the 2026 calendar, so the spec's "Thu 30 Oct" appears as Thu 29 Oct.
 
 ### Practice: practice_ui_structure.md §12 acceptance checklist
 
@@ -77,7 +102,6 @@ Item types in the demo bank: `code` (Python, Haskell), `worked_steps` (first wro
 - **Gaps are suspected, not diagnoses:** hypotheses show `suspected`, their evidence IDs, and *Prove it with a new diagnostic* (the student challenge path).
 - **Graph has a list alternative:** Skills has *Graph / List*, and graph nodes are keyboard-focusable buttons.
 - **`part_of` vs `requires`:** the dashed area shows the `part_of` grouping, arrows show `requires`, and the proposed edge is dashed amber, marked "under review".
-- **Planning provenance:** `model_suggested` vs `student_explicit`; unmapped phrases are shown and no new skill IDs are invented.
 - **Reflection is private and low-weight:** "Private" badge; confidence is self-report and "never raises your skill indices"; the evidence opt-in checkbox matches `allow_use_as_learning_evidence`.
 - **Human review is append-only:** a decision requires a reason, the receipt records time and reviewer, and later changes create a new decision.
 - **Canonical vocabulary:** `assessment_stage` (recall/understanding/transfer), `activity_type`, `approval_status`, `job_status`, `grading_validity` are used as named in the contracts.

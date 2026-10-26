@@ -8,16 +8,6 @@
   const state = {
     role: "student",
     navOpen: false,
-    plan: {
-      text: D.plan.text,
-      horizon: D.plan.time_horizon,
-      proposed: true,
-      loading: false,
-      selected: new Set(D.plan.confirmed_skill_ids),
-      added: [],
-      confirmed: false,
-    },
-    dash: { generating: null },
     skills: { view: "graph", selected: "python.conditionals", challenged: false },
     project: { tab: "design", milestone: "M3", hintsUsed: 1 },
     reflection: { step: "write", confidence: 40, difficulty: "hard", evidence: true, tags: new Set(["python.conditionals"]) },
@@ -35,10 +25,6 @@
   const chip = (id, cls = "") => `<span class="chip ${cls}">${esc(id)}</span>`;
   const themeToggle = () => `<div class="theme-toggle" role="group" aria-label="Colour mode">${[["dark", "moon", "Dark mode"], ["light", "sun", "Light mode"]].map(([m, ic, l]) => `<button type="button" data-theme-set="${m}" aria-pressed="${state.theme === m}" aria-label="${l}" title="${l}">${icon(ic)}</button>`).join("")}</div>`;
   const idx = (v) => (v == null ? "—" : v.toFixed(2));
-  const ACTIVITY = { single_skill_exercise: "Single-skill exercise", multi_skill_exercise: "Multi-skill exercise", project: "Project" };
-  const STAGE = { recall: "Recall", understanding: "Understanding", transfer: "Transfer" };
-  const STAGE_CLS = { recall: "b-recall", understanding: "b-understand", transfer: "b-transfer" };
-  const stageBadge = (s) => `<span class="badge ${STAGE_CLS[s]}">${STAGE[s]}</span>`;
   const conf = (l) => `<span class="conf" data-l="${l}" title="Uncalibrated label"><i><b></b><b></b><b></b></i>${l}</span>`;
 
   let toastTimer;
@@ -64,17 +50,19 @@
 
   // ---------- routing ----------
   const NAV = [
-    { id: "dashboard", label: "Dashboard", icon: "layout-dashboard", href: "#/dashboard" },
-    { id: "plan", label: "Plan", icon: "target", href: "#/plan" },
-    { id: "skills", label: "Skills", icon: "network", href: "#/skills" },
+    { id: "today", label: "Today", icon: "house", href: "#/" },
+    { id: "plan", label: "Plan", icon: "calendar-range", href: "#/plan" },
     { id: "practice", label: "Practice", icon: "book-open-check", href: "#/practice" },
+    { id: "progress", label: "Progress", icon: "chart-column", href: "#/progress" },
+    { id: "skills", label: "Skills", icon: "network", href: "#/skills" },
     { id: "projects", label: "Project", icon: "folder-kanban", href: "#/projects/cafe-terminal" },
     { id: "reflection", label: "Reflection", icon: "notebook-pen", href: "#/reflection" },
   ];
 
   const ROUTES = {
-    dashboard: { title: "Dashboard", render: pageDashboard },
-    plan: { title: "Plan", render: pagePlan },
+    today: { title: "Today", render: () => PL.today(hashParts()) },
+    plan: { title: "Plan", render: () => PL.render(hashParts()) },
+    progress: { title: "Progress", render: () => PL.progress() },
     skills: { title: "Skills", render: pageSkills },
     practice: { title: "Practice", render: () => PR.render(hashParts()) },
     projects: { title: "Campus Café Terminal", parent: "Project", render: pageProject },
@@ -83,31 +71,33 @@
     settings: { title: "Settings", render: pageSettings },
   };
 
-  let PR; // Practice module (practice.js), created once the helpers below exist
+  let PR, PL; // Practice (practice.js) and Planning (planning.js) modules, created once the helpers below exist
   function hashParts() {
     const [path, qs] = location.hash.replace(/^#\/?/, "").split("?");
     return { path: path.split("/").filter(Boolean).slice(1), query: Object.fromEntries(new URLSearchParams(qs || "")) };
   }
 
   function currentRoute() {
-    const seg = (location.hash.replace(/^#\/?/, "").split("?")[0].split("/")[0] || "dashboard");
+    const seg = (location.hash.replace(/^#\/?/, "").split("?")[0].split("/")[0] || "today");
+    if (seg === "dashboard") return "today";
     if (seg === "learn") { location.replace("#/practice/list-total"); return "practice"; }
     if (seg === "login") return "login";
-    return ROUTES[seg] ? seg : "dashboard";
+    return ROUTES[seg] ? seg : "today";
   }
 
-  function render(focus = false) {
+  // quiet: re-render in place (no page fade), used for interactions; navigation fades in
+  function render(focus = false, quiet = false) {
     const id = currentRoute();
     if (id === "login") {
       app.innerHTML = pageLogin();
     } else {
-      const r = id === "practice" ? { ...ROUTES.practice, ...PR.meta(hashParts()) } : ROUTES[id];
-      app.innerHTML = shell(id, r, r.render());
+      const r = id === "practice" ? { ...ROUTES.practice, ...PR.meta(hashParts()) } : id === "plan" ? { ...ROUTES.plan, ...PL.meta(hashParts()) } : ROUTES[id];
+      app.innerHTML = shell(id, r, r.render(), quiet);
     }
     bind(id);
     if (window.lucide) window.lucide.createIcons({ attrs: { "aria-hidden": "true" } });
     if (focus) {
-      const h = app.querySelector("h1");
+      const h = app.querySelector("[data-autofocus]") || app.querySelector("h1");
       if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
       window.scrollTo(0, 0);
     }
@@ -116,7 +106,7 @@
   window.addEventListener("hashchange", () => { routeGen++; state.navOpen = false; render(true); });
 
   // ---------- shell ----------
-  function shell(id, r, body) {
+  function shell(id, r, body, quiet) {
     const person = state.role === "instructor" ? D.instructor : D.student;
     const pending = D.reviewQueue.filter((q) => !state.review.decisions[q.id]).length;
     const link = (n) => `<a href="${n.href}" ${n.id === id ? 'aria-current="page"' : ""}>${icon(n.icon)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count}</span>` : ""}</a>`;
@@ -155,246 +145,15 @@
           <span class="sample-pill" title="All names, numbers and activity on these screens are synthetic.">${icon("flask-conical")}<span>Sample data<span class="long"> · design prototype</span></span></span>
           ${themeToggle()}
         </header>
-        <main id="content" class="page fade-in">${body}</main>
+        <main id="content" class="page ${quiet ? "" : "fade-in"}">${body}</main>
       </div>
     </div>`;
   }
 
-  // ---------- dashboard ----------
-  function scoreDiagram(t, weights) {
-    const rows = [
-      { k: "Planning", w: weights.planning, v: t.features.P, why: "Matches your confirmed plan" },
-      { k: "Knowledge gap", w: weights.gap, v: t.features.G, why: "Recent transfer difficulty" },
-      { k: "Retention", w: weights.retention, v: t.features.R, why: "Loops check due today" },
-    ];
-    return `
-    <div class="score-diagram" role="group" aria-label="How the priority index is computed">
-      <div class="score-inputs">
-        ${rows.map((r) => `<div class="node"><span>${r.k} <span class="w">× ${r.w.toFixed(2)}</span></span><span class="v">${r.v.toFixed(2)}</span><span class="why">${r.why}</span></div>`).join("")}
-      </div>
-      <svg class="score-wires" viewBox="0 0 64 210" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0 35 C 32 35, 32 105, 64 105"/><path d="M0 105 L 64 105"/><path d="M0 175 C 32 175, 32 105, 64 105"/>
-      </svg>
-      <div class="node score-out">
-        <div class="big">${t.priority_score.toFixed(2)}</div>
-        <div class="lbl">priority index<br>uncalibrated heuristic,<br>not a mastery probability</div>
-      </div>
-    </div>`;
-  }
-
-  function pageDashboard() {
-    const sel = D.selection;
-    const top = sel.ranked_targets[0];
-    const gen = state.dash.generating;
-    const steps = ["queued", "running", "succeeded"];
-    const genIdx = gen ? steps.indexOf(gen) : -1;
-    const attention = Object.entries(D.estimates).filter(([, e]) => e.gap_priority_index != null && e.gap_priority_index > 0.5);
-    return `
-    <div class="page-head">
-      <div>
-        <h1>Good afternoon, Sam</h1>
-        <p>One retention check is due today and your List total exercise is waiting where you left it.</p>
-      </div>
-      <div class="page-actions">
-        <a class="btn" href="#/plan">${icon("target")}Edit plan</a>
-        <a class="btn" href="#/practice/list-total?task=t-loops">${icon("book-open-check")}Continue practice</a>
-      </div>
-    </div>
-
-    <div class="grid-dash">
-      <div class="stack">
-        <section class="panel" aria-labelledby="rec-h">
-          <div class="panel-head">
-            <h2 id="rec-h">Recommended next</h2>
-            <span class="row"><span class="chip dashed" title="Selector policy version">${sel.policy_version}</span></span>
-          </div>
-          <div class="panel-body">
-            <div class="rec-title">
-              <h2>${top.skill_ids.map((s) => skill(s).name).join(" + ")}</h2>
-              <span class="badge b-neutral plain">${ACTIVITY[top.activity_type]}</span>
-              <span class="badge b-transfer">Transfer</span>
-            </div>
-            <p class="muted" style="margin-top:6px">${esc(top.explanation)}</p>
-            <div class="row" style="margin-top:10px">${top.skill_ids.map((s) => chip(s)).join("")}</div>
-            ${scoreDiagram(top, sel.weights)}
-            <div class="row between">
-              <div class="row">
-                <button class="btn btn-primary ${gen && gen !== "succeeded" ? "is-loading" : ""}" type="button" data-act="generate" ${gen && gen !== "succeeded" ? "disabled" : ""}>${gen ? (gen === "succeeded" ? `${icon("play")}Open exercise` : "Generating") : `${icon("play")}Start this exercise`}</button>
-                <button class="btn btn-ghost" type="button" data-act="toggle-override" aria-expanded="false" aria-controls="override">${icon("git-branch")}Choose something else</button>
-              </div>
-              ${gen ? `<div class="job" role="status" aria-live="polite"><span class="faint">Generation job</span><span class="job-steps">${steps.map((s, i) => `<span class="${i < genIdx || gen === "succeeded" ? "done" : i === genIdx ? "on" : ""}">${s}</span>`).join("")}</span></div>` : `<span class="tiny faint">Weights 0.40 / 0.35 / 0.25 are a configurable default, not a validated policy.</span>`}
-            </div>
-            <div class="override" id="override" hidden style="margin-top:16px">
-              <div class="label">You decide what to study. Pick a different target:</div>
-              <div class="row" style="margin-top:8px">
-                <select class="select" style="max-width:280px" aria-label="Different target skill">
-                  ${D.skills.map((s) => `<option ${s.skill_id === "python.lists" ? "selected" : ""}>${s.skill_id}</option>`).join("")}
-                </select>
-              </div>
-              <p class="small muted" style="margin-top:8px">If prerequisites look missing, Socratix offers support instead of blocking you.</p>
-              <div class="override-opts">
-                <button class="btn btn-sm" type="button" data-toast="Override saved. Starting your choice anyway.">Start anyway</button>
-                <button class="btn btn-sm" type="button" data-toast="Integrated prep added: a short warm-up joins the task.">Integrated prep</button>
-                <button class="btn btn-sm" type="button" data-toast="Quick diagnostic queued (3 questions).">Quick diagnostic</button>
-              </div>
-            </div>
-            <div class="alts" style="margin-top:18px">
-              <div class="small faint" style="padding-bottom:8px">Other ranked options</div>
-              ${sel.ranked_targets.slice(1).map((t) => `
-                <div class="alt">
-                  <div><div class="small" style="font-weight:500">${t.skill_ids.map((s) => skill(s).name).join(" + ")} <span class="faint" style="font-weight:400">· ${ACTIVITY[t.activity_type]}</span></div><div class="tiny faint">${t.reasons.join(" · ")}</div></div>
-                  <span class="mono small muted alt-score" title="Uncalibrated priority index">${t.priority_score.toFixed(3)}</span>
-                  <button class="btn btn-sm" type="button" data-toast="Override recorded. The selector logs your choice.">Choose</button>
-                </div>`).join("")}
-            </div>
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="recent-h">
-          <div class="panel-head"><h2 id="recent-h">Recent work</h2><span class="sub">Correctness, help and independence are recorded separately</span></div>
-          <div class="panel-body table-wrap">
-            <table class="data">
-              <thead><tr><th>Activity</th><th class="hide-sm">Stage</th><th>Result</th><th class="hide-sm">Help used</th><th>Evidence</th></tr></thead>
-              <tbody>
-                ${D.recent.map((r) => `
-                <tr>
-                  <td><a href="${r.href}">${esc(r.title)}</a><div class="tiny faint">${ACTIVITY[r.activity]} · ${r.when}</div></td>
-                  <td class="hide-sm">${stageBadge(r.stage)}</td>
-                  <td><span class="badge ${r.status === "pass" ? "b-pass" : r.status === "fail" ? "b-fail" : "b-neutral"}">${r.result}</span></td>
-                  <td class="hide-sm muted nw">${r.help}</td>
-                  <td>${r.independent === true ? `<span class="small inline-ic">${icon("circle-check")}Independent</span>` : r.independent === false ? `<span class="small muted">Assisted</span>` : `<span class="small faint">Pending</span>`}</td>
-                </tr>`).join("")}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <div class="stack">
-        <section class="panel" aria-labelledby="goal-h">
-          <div class="panel-head"><h2 id="goal-h">Current goal</h2><span class="badge b-neutral plain">This week</span></div>
-          <div class="panel-body stack-sm">
-            <p class="goal-text">“${esc(D.plan.text)}”</p>
-            <div class="row">${D.plan.confirmed_skill_ids.map((s) => chip(s)).join("")}</div>
-            <p class="tiny faint">Confirmed by you on 23 Oct. Only confirmed tags reach the selector.</p>
-          </div>
-          <div class="panel-foot"><a class="btn btn-sm" href="#/plan">Edit goal and tags</a></div>
-        </section>
-
-        <section class="panel" aria-labelledby="due-h">
-          <div class="panel-head"><h2 id="due-h">Unaided checks due</h2><span class="sub">No hints on these</span></div>
-          <div class="panel-body">
-            ${D.retentionDue.map((d) => `
-              <div class="due">
-                <span class="due-dot ${d.kind === "later" ? "later" : ""}" aria-hidden="true"></span>
-                <div><div class="small" style="font-weight:500">${skill(d.skill_id).name} <span class="faint" style="font-weight:400">· ${d.due}</span></div><div class="tiny faint">${d.reason}</div></div>
-                ${d.kind === "now" ? `<button class="btn btn-sm" type="button" data-toast="Reassessment job queued: independent transfer check.">Start</button>` : `<span class="tiny faint">Scheduled</span>`}
-              </div>`).join("")}
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="att-h">
-          <div class="panel-head"><h2 id="att-h">Worth a look</h2><a class="small" href="#/skills">All skills</a></div>
-          <div class="panel-body stack-sm">
-            ${attention.map(([id, e]) => `
-              <div class="stack-sm" style="gap:8px">
-                <div class="row between"><span class="small" style="font-weight:500">${skill(id).name}</span>${conf(e.confidence_label)}</div>
-                ${meter("Transfer", e.transfer_index, "var(--transfer)")}
-                ${e.hypotheses.map((h) => `<div class="tiny muted">${icon("circle-help")} <b style="font-weight:500;color:var(--ink)">${h.label}</b> · ${h.status}, not a diagnosis</div>`).join("")}
-              </div>`).join('<hr class="divider" style="margin:4px 0">')}
-          </div>
-        </section>
-      </div>
-    </div>`;
-  }
-
+  // ---------- shared ----------
   function meter(label, v, color) {
     return `<div class="meter ${v == null ? "none" : ""}"><span class="muted">${label}</span><span class="track" role="img" aria-label="${label} index ${v == null ? "insufficient evidence" : idx(v)}"><span class="fill" style="width:${v == null ? 0 : v * 100}%;background:${color}"></span></span><span class="val">${v == null ? "n/a" : idx(v)}</span></div>`;
   }
-
-  // ---------- plan ----------
-  function pagePlan() {
-    const p = state.plan;
-    const tags = [...D.planProposal.candidate_tags, ...p.added.map((id) => ({ skill_id: id, confidence_label: "high", provenance: "student_explicit", reason: "Added by you" }))];
-    const n = p.selected.size;
-    const notInList = D.skills.filter((s) => !tags.some((t) => t.skill_id === s.skill_id));
-    return `
-    <div class="page-head">
-      <div>
-        <h1>Plan</h1>
-        <p>Say what you want to work on in your own words. Socratix suggests matching skills from the approved catalogue; you confirm, edit or reject every one.</p>
-      </div>
-      <div class="flow" aria-label="Planning flow">
-        <span class="node on">Your goal</span><span class="wire"></span><span class="node ${p.proposed ? "on" : ""}">Suggested tags</span><span class="wire"></span><span class="node ${p.confirmed ? "on" : ""}">You confirm</span><span class="wire"></span><span class="node ${p.confirmed ? "on" : ""}">Selector</span>
-      </div>
-    </div>
-
-    <div class="plan-layout">
-      <section class="panel" aria-labelledby="goal-in">
-        <div class="panel-head"><h2 id="goal-in">Your goal</h2></div>
-        <div class="panel-body stack-sm" style="gap:16px">
-          <div class="field">
-            <label for="plan-text">What do you want to be able to do?</label>
-            <textarea class="textarea" id="plan-text" rows="4" placeholder="e.g. I want to understand why my loops stop too early">${esc(p.text)}</textarea>
-            <span class="hint-text">Plain language is fine. This is your plan, not a test.</span>
-          </div>
-          <div class="field">
-            <span class="label" id="hz">Time horizon</span>
-            <div class="seg" role="group" aria-labelledby="hz">
-              ${["today", "week", "later"].map((h) => `<button type="button" data-horizon="${h}" aria-pressed="${p.horizon === h}">${h === "week" ? "This week" : h[0].toUpperCase() + h.slice(1)}</button>`).join("")}
-            </div>
-          </div>
-          <div class="row">
-            <button class="btn btn-primary ${p.loading ? "is-loading" : ""}" type="button" data-act="suggest">${p.loading ? "Matching skills" : `${icon("wand-sparkles")}Suggest skill tags`}</button>
-            <span class="tiny faint">Suggestions never change your profile on their own.</span>
-          </div>
-          <hr class="divider">
-          <div class="stack-sm">
-            <h3>Active plan</h3>
-            <dl class="kv">
-              <dt>Saved</dt><dd>${p.confirmed ? "Just now" : "Thu 23 Oct, 12:00"}</dd>
-              <dt>Horizon</dt><dd>${p.horizon === "week" ? "This week" : p.horizon}</dd>
-              <dt>Confirmed</dt><dd class="row">${[...(p.confirmed ? p.selected : D.plan.confirmed_skill_ids)].map((s) => chip(s)).join("") || '<span class="faint">None</span>'}</dd>
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="tags-h" aria-busy="${p.loading}">
-        <div class="panel-head"><h2 id="tags-h">Suggested skill tags</h2><span class="sub">${tags.length} candidates · ${n} selected</span></div>
-        <div class="panel-body">
-          ${p.loading ? `<div class="empty"><p>Matching your goal against approved skills…</p></div>` : !p.proposed ? `<div class="empty">${icon("list-checks")}<p>Write a goal and press <b>Suggest skill tags</b>. You will see why each skill was suggested before anything is saved.</p></div>` : `
-          <fieldset style="border:0;padding:0;margin:0">
-            <legend class="sr-only">Choose which tags to confirm</legend>
-            ${tags.map((t) => `
-            <div class="tag-row ${p.selected.has(t.skill_id) ? "" : "rejected"}">
-              <label class="check"><input type="checkbox" data-tag="${t.skill_id}" ${p.selected.has(t.skill_id) ? "checked" : ""} aria-label="Confirm ${t.skill_id}"></label>
-              <div>
-                <div class="row">${chip(t.skill_id)}<span class="small">${skill(t.skill_id).name}</span></div>
-                <div class="why">${esc(t.reason)}${t.quote ? `, from your words <q>${esc(t.quote)}</q>` : ""}</div>
-              </div>
-              <div class="stack-sm" style="gap:4px;align-items:flex-end">${conf(t.confidence_label)}<span class="tiny faint">${t.provenance.replace("_", " ")}</span></div>
-            </div>`).join("")}
-          </fieldset>
-          <div class="note" style="margin-top:12px">${icon("circle-help")}<div><b style="color:var(--ink);font-weight:500">Not matched:</b> ${D.planProposal.unmapped_phrases.map((u) => chip(u, "dashed")).join(" ")}<div style="margin-top:4px">This isn't a skill in the approved catalogue, so nothing new was invented. The skills above are the closest approved matches.</div></div></div>
-          <div class="field" style="margin-top:16px">
-            <label for="add-skill">Add a skill yourself</label>
-            <div class="row">
-              <select class="select" id="add-skill" style="max-width:260px">${notInList.map((s) => `<option value="${s.skill_id}">${s.skill_id}</option>`).join("")}</select>
-              <button class="btn btn-sm" type="button" data-act="add-skill" ${notInList.length ? "" : "disabled"}>Add</button>
-            </div>
-          </div>`}
-        </div>
-        ${p.proposed && !p.loading ? `
-        <div class="panel-foot">
-          <button class="btn btn-primary" type="button" data-act="confirm-plan" ${n ? "" : "disabled"}>${icon("check")}Confirm ${n} tag${n === 1 ? "" : "s"}</button>
-          <button class="btn btn-ghost" type="button" data-act="reject-all">Reject all</button>
-          ${p.confirmed ? `<span class="small" role="status" style="color:var(--pass)">${icon("circle-check")} Plan saved. The selector now uses these ${n} tags.</span>` : `<span class="tiny faint">Unchecked tags are recorded as rejected.</span>`}
-        </div>` : ""}
-      </section>
-    </div>`;
-  }
-
   // ---------- skills ----------
   const NW = 178, NH = 74, OY = 52, GH = 300 + NH + OY + 24;
   function graphSvg() {
@@ -745,6 +504,7 @@
     const S = state.settings;
     return `
     <div class="page-head"><div><h1>Settings & privacy</h1><p>What Socratix stores about your learning, who can see it, and what you can change.</p></div></div>
+    ${PL.settingsSection()}
     <div class="two">
       <section class="panel" aria-labelledby="pv-h">
         <div class="panel-head"><h2 id="pv-h">Privacy</h2></div>
@@ -759,7 +519,7 @@
           <div class="panel-head"><h2 id="st-h">What's stored</h2></div>
           <div class="panel-body">
             <table class="data"><tbody>
-              <tr><td>Plans and confirmed tags</td><td class="muted small">Until you delete them</td></tr>
+              <tr><td>Plans, ticks and time ratings (under your nickname)</td><td class="muted small">Until you delete them</td></tr>
               <tr><td>Attempts, code and test results</td><td class="muted small">Append-only evidence</td></tr>
               <tr><td>Hints used and answer reveals</td><td class="muted small">Append-only evidence</td></tr>
               <tr><td>Reflections</td><td class="muted small">Private</td></tr>
@@ -842,30 +602,7 @@
     const on = (sel, fn, ev = "click") => app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, (e) => fn(el, e)));
 
     if (id === "practice") PR.bind(app, hashParts());
-
-    if (id === "dashboard") {
-      on('[data-act="toggle-override"]', (b) => { const o = app.querySelector("#override"); o.hidden = !o.hidden; b.setAttribute("aria-expanded", String(!o.hidden)); });
-      on('[data-act="generate"]', async () => {
-        if (state.dash.generating === "succeeded") { location.hash = "#/practice/list-total"; return; }
-        const gen = routeGen;
-        for (const s of ["queued", "running", "succeeded"]) {
-          if (!stillOn(gen)) { state.dash.generating = null; return; }
-          state.dash.generating = s; render(); await sleep(s === "succeeded" ? 0 : 900);
-        }
-        if (stillOn(gen)) toast("Exercise verified and published. Ready when you are.");
-      });
-    }
-
-    if (id === "plan") {
-      const P = state.plan;
-      on("#plan-text", (t) => { P.text = t.value; }, "input");
-      on("[data-horizon]", (b) => { P.horizon = b.dataset.horizon; render(); });
-      on('[data-act="suggest"]', async () => { const gen = routeGen; P.loading = true; P.confirmed = false; render(); await sleep(1100); P.loading = false; P.proposed = true; if (stillOn(gen)) render(); });
-      on("[data-tag]", (c) => { c.checked ? P.selected.add(c.dataset.tag) : P.selected.delete(c.dataset.tag); P.confirmed = false; render(); }, "change");
-      on('[data-act="add-skill"]', () => { const v = app.querySelector("#add-skill").value; P.added.push(v); P.selected.add(v); P.confirmed = false; render(); });
-      on('[data-act="reject-all"]', () => { P.selected.clear(); P.confirmed = false; render(); toast("All suggestions rejected. Your plan has no tags."); });
-      on('[data-act="confirm-plan"]', () => { P.confirmed = true; render(); toast(`Plan confirmed with ${P.selected.size} tags.`); });
-    }
+    if (id === "today" || id === "plan" || id === "progress" || id === "settings") PL.bind(app, id, hashParts());
 
     if (id === "skills") {
       on("[data-view]", (b) => { state.skills.view = b.dataset.view; render(); });
@@ -910,15 +647,21 @@
 
     if (id === "login") {
       on("[data-lrole]", (b) => { state.role = b.dataset.lrole; render(); });
-      on("[data-login]", (f, e) => { e.preventDefault(); location.hash = state.role === "instructor" ? "#/review" : "#/dashboard"; }, "submit");
+      on("[data-login]", (f, e) => { e.preventDefault(); location.hash = state.role === "instructor" ? "#/review" : "#/"; }, "submit");
     }
   }
 
-  PR = window.PracticeModule({
+  const listeners = {};
+  const SX = {
     D, esc, icon, toast, hlPy, sleep,
     gen: () => routeGen, stillOn,
-    render: () => render(false),
+    render: () => render(false, true),
     icons: () => window.lucide && window.lucide.createIcons({ attrs: { "aria-hidden": "true" } }),
-  });
+    on: (ev, fn) => (listeners[ev] = listeners[ev] || []).push(fn),
+    emit: (ev, data) => (listeners[ev] || []).forEach((fn) => fn(data)),
+  };
+  PL = window.PlanningModule(SX);
+  SX.planTask = PL.planTask;
+  PR = window.PracticeModule(SX);
   render();
 })();
