@@ -115,3 +115,49 @@ This document is the **current approved design**, not a disposable prompt. If im
 6. Coding agents must propose changes rather than autonomously approving architectural, grading, or mastery-policy changes.
 
 See [repository team rules](../README.md), [agent rules](../AGENTS.md), and [change-log template](changes/CHANGELOG.md). Ordinary typo or formatting fixes can be noted in the PR without a design-change entry.
+
+
+## Implementation update — 2026-10-26 (Proposed)
+
+Component C now includes a locally tested project-generation pipeline
+using the existing ProjectSpec v1.0 structure.
+
+### Implemented locally
+- ProjectSpec validation against trusted approved skills and
+  engineering outcome identifiers.
+- Milestone uniqueness, assessment-method and dependency checks.
+- AI project-draft generation using the shared gateway interface.
+- Structural milestone-plan checks.
+- Independent advisory semantic project review.
+- Private per-milestone executable-test specification candidates.
+- Private four-level qualitative rubric candidates.
+- Worker orchestration for tests, rubric and mixed milestones.
+- Public ProjectSpec snapshot and fingerprint separate from private
+  assessment candidates.
+- Conservative project lifecycle transition checks.
+- Asynchronous project-generation endpoint returning a JobRef.
+
+### Limitations and integration requirements
+- ProjectSpec's canonical shared example does not provide complete
+  requirement definitions or an executable public interface contract.
+  Those details must be resolved with the relevant component owners
+  before reliable executable milestone verification can be claimed.
+- Generated test specifications are candidates, not runnable or
+  sandbox-verified test suites.
+- Semantic review cannot replace authorised instructor approval.
+- New project families and subjective design rubrics require manual review.
+- Member E must provide secure verification and grading.
+- Member F must provide authentication, durable jobs, AI gateway,
+  persistence, route registration and authorised retrieval.
+- Public student responses must exclude private test cases, model
+  solutions and unpublished grader artifacts.
+- Published project versions and milestone identifiers must remain
+  stable for submissions and assessment evidence.
+
+### Local verification
+45 project unit/contract tests passed.
+The combined B/C suite subsequently passed 163 tests.
+
+### Review status
+Proposed; shared requirement and grader-interface questions remain
+subject to component-owner review.

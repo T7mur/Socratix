@@ -39,3 +39,27 @@ This is a **human-readable ledger of meaningful design changes** (not a substitu
 - **Verification:** Validate local Markdown links, all seven component guides, unit/contract/integration directories per component, owner-specific prompt directories and Git placeholders. Runtime acceptance tests remain required when components are implemented.
 - **Reviewers / decision date:** Member F and affected component owners / pending review
 - **ADR:** Not required for this reversible folder organisation; runtime architecture and responsibilities are unchanged.
+
+
+
+### 2026-10-26 — Component B exercise generation extensions (Proposed)
+- **Owner / branch / PR:** Member B / OC/exercise_generation / not opened
+- **Component(s):** docs/exercise_generation.md
+- **Before:** Exercise-generation pipeline focused on coding reference solutions, executable tests, and initial deterministic validation.
+- **After:** Add semantic review, duplicate detection, non-coding model answers, private grading-rubric candidates, and separate coding/non-coding worker paths.
+- **Why / alternatives:** Support recall and understanding assessments without treating every task as executable Python code.
+- **Impact:** Exercise-generation modules, worker flow, private assessment artifacts, prompts, and tests. No approved shared public DTO or database migration.
+- **Verification:** 117 local exercise unit/integration tests passed.
+- **Reviewers / decision date:** Component F/E owners and designated academic reviewer / pending.
+- **ADR:** None proposed; existing component boundaries retained.
+
+### 2026-10-26 — Component C project generation implementation (Proposed)
+- **Owner / branch / PR:** Member C / OC/exercise_generation / not opened
+- **Component(s):** docs/project_generation.md
+- **Before:** Approved project-generation design and canonical ProjectSpec example, without locally implemented project generation.
+- **After:** Add ProjectSpec and milestone validation, AI-backed project draft generation, private per-milestone test and four-level rubric candidates, independent semantic review, project worker, conservative lifecycle transitions, and asynchronous generation-job route.
+- **Why / alternatives:** Implement milestone-based project generation while preserving public/private separation and requiring trusted verification and instructor approval before publication.
+- **Impact:** Project-generation modules, prompts, project API, and tests. No database migration or approved shared public DTO change. Private assessment formats remain implementation proposals.
+- **Verification:** 45 local project unit/contract tests passed. Real sandbox verification, persistent jobs, public route registration, and authorised publication remain untested.
+- **Reviewers / decision date:** Members E/F and designated academic reviewer / pending.
+- **ADR:** Cross-component integration review pending; no runtime architecture change proposed.

@@ -114,3 +114,35 @@ This document is the **current approved design**, not a disposable prompt. If im
 6. Coding agents must propose changes rather than autonomously approving architectural, grading, or mastery-policy changes.
 
 See [repository team rules](../README.md), [agent rules](../AGENTS.md), and [change-log template](changes/CHANGELOG.md). Ordinary typo or formatting fixes can be noted in the PR without a design-change entry.
+
+## Implementation update — 2026-10-26 (Proposed)
+
+Component B now includes a locally tested exercise-generation pipeline
+supporting coding and non-coding assessment candidates.
+
+### Implemented locally
+- Deterministic curriculum eligibility and TaskSpec validation.
+- Frozen, versioned exercise specifications and exact duplicate detection.
+- Independent advisory AI semantic review before private generation.
+- Coding exercises: private reference solutions and hidden-test candidates.
+- Non-coding exercises: private written model answers and grading rubrics.
+- Private artifact manifest with TaskSpec, reference, hidden-test and
+  optional rubric fingerprints.
+- Asynchronous exercise-generation route using injected authentication
+  and persistent-job interfaces.
+
+### Integration boundaries
+- AI review is not instructor approval.
+- Generated assessment candidates are not automatically verified.
+- Member E's sandbox must verify executable assessments.
+- Member F's backend must provide authentication, durable jobs,
+  AI gateway, persistence and authorised student-safe retrieval.
+- Private grading artifacts must not be exposed through public routes.
+
+### Local verification
+117 exercise tests passed before the final manifest change.
+The combined B/C suite subsequently passed 163 tests.
+
+### Review status
+Proposed; requires relevant component-owner and academic review.
+No new shared public DTO has been approved by this update.
