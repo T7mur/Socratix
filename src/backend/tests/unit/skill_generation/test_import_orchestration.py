@@ -9,6 +9,7 @@ from app.core.errors import ValidationError
 from app.integrations.elm import LLMProviderError
 from app.modules.skill_generation import importer
 from app.modules.skill_generation.import_artifacts import PreparedImport
+from app.modules.skill_generation.recovery import ResolvedRecovery
 
 
 @pytest.fixture
@@ -181,3 +182,33 @@ async def test_semantically_rejected_checkpoints_do_not_count_as_completed(bound
     events = []
     await execute(boundary, progress=events.append)
     assert events[-1].phase == "Import review_required" and events[-1].completed == 0
+    calls = boundary[-1].calls
+    await execute(boundary)
+    assert boundary[-1].calls == calls, "Rejected saved proposals must not silently trigger more paid calls"
+
+
+async def test_recovery_copies_saved_batches_without_provider_calls_and_resumes(boundary):
+    _, gateway, _, prepared, _, state = boundary
+    saved = {}
+    for request in prepared.requests["AI-Demo"]:
+        saved[request["user_data"]["chunk_id"]] = await gateway.generate_json(payload=request)
+    state.calls = 0
+    recovery = ResolvedRecovery(saved, {"source_run_id": str(uuid4()), "review_digest": "synthetic"}, [])
+    report, code = await execute(boundary, recovery=recovery)
+    assert code == 0 and state.calls == 0 and state.persisted
+    assert report["recovery_source_run_id"] == recovery.provenance["source_run_id"]
+    await execute(boundary, recovery=recovery)
+    assert state.calls == 0
+
+
+async def test_recovery_exclusions_remain_review_required_even_with_pending_candidates(boundary):
+    _, gateway, _, prepared, _, state = boundary
+    saved = {r["user_data"]["chunk_id"]: await gateway.generate_json(payload=r)
+             for r in prepared.requests["AI-Demo"]}
+    state.calls = 0
+    recovery = ResolvedRecovery(saved, {"source_run_id": str(uuid4())},
+                                [{"chunk_id": "synthetic", "reason": "Operator excluded ambiguous evidence"}])
+    preview, code = await execute(boundary, recovery=recovery, dry_run=True)
+    assert code == 2 and preview["status"] == "review_required" and not state.rows
+    report, code = await execute(boundary, recovery=recovery)
+    assert code == 2 and report["status"] == "review_required" and state.persisted and state.calls == 0

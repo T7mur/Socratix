@@ -14,6 +14,19 @@ PROMPT_VERSION = "skill-extract-v1"
 SCHEMA_VERSION = "skill-candidates-v1"
 
 
+class CandidateValidationError(ValidationError):
+    """Safe structural diagnostics; never carries source text or raw model output."""
+    def __init__(self, message, *, code, resource_type=None, resource_id=None):
+        super().__init__(message)
+        self.code = code
+        self.details = {"message": message, "resource_type": resource_type, "resource_id": resource_id}
+
+
+def semantic_payload(payload: dict) -> dict:
+    """Compare exact proposed meaning, separately from its verified citation set."""
+    return {key: value for key, value in payload.items() if key != "source_refs"}
+
+
 class CandidateEvidence(Contract):
     resource_type: Literal["skill", "outcome", "relation"]
     # For relations use 'from_skill_id|relation|to_skill_id'; the importer assigns the UUID.
@@ -57,13 +70,18 @@ def validate_batches(batches: list[tuple[dict, SkillCandidateBatch]], approved: 
                 if pair in local:
                     raise ValidationError("Duplicate candidate within a chunk")
                 local.add(pair)
-                if pair in resources and checksum(resources[pair]["payload"]) != checksum(payload):
-                    raise ValidationError("Conflicting candidates across unit chunks")
+                previous = resources.get(pair)
+                if previous and checksum(semantic_payload(previous["payload"])) != checksum(semantic_payload(payload)):
+                    raise CandidateValidationError("Conflicting candidates across unit chunks",
+                        code="conflicting_candidates", resource_type=kind, resource_id=key)
                 if kind != "relation":
                     for ref in payload["source_refs"]:
                         if not any(ref["uri"] == s["locator"]["uri"] and ref["section"] == s["section"]
                                    and ref["page"] == s["page"] for s in spans.values()):
                             raise ValidationError("Candidate source locator was not supplied")
+                if previous and kind != "relation":
+                    refs = {checksum(ref): ref for ref in previous["payload"]["source_refs"] + payload["source_refs"]}
+                    payload["source_refs"] = [refs[key] for key in sorted(refs)]
                 resources[pair] = {
                     "resource_type": kind,
                     "resource_id": stable_id("skill-relation", key) if kind == "relation" else key,

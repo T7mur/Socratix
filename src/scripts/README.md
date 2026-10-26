@@ -11,6 +11,12 @@ Import and seed tools must preserve human approval and immutable versions. Never
 
 ## Standalone LLM request
 
+Recover saved proposals with `import_skills.py --artifacts ... --from-run UUID` and the normal
+actor/target/permission flags. This prepares comparison/JSON choices without provider calls.
+After human review, supply `--resolutions PATH --dry-run`, then remove dry-run to stage pending
+candidates. See [recovery](../../docs/skill_import_recovery.md). Semantic failures no longer
+silently regenerate saved responses; reports now contain safe typed failure details.
+
 For the merged PDF → gateway → pending review workflow, see [bridge runbook](../../docs/skill_import_bridge.md).
 `import_skills.py` supports validated artifact import, dry-run, resume and report regeneration.
 It now displays chunk/unit progress on stderr (`--no-progress` disables it). To monitor an

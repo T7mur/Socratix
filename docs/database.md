@@ -24,6 +24,12 @@ See [runbook](skill_import_bridge.md) and the regenerated [dictionary](database_
 
 ## Role of PostgreSQL
 
+Proposed saved-response recovery reuses the import ledger without schema changes. A derived
+run's configuration pins source-run ID, original configuration, saved-batch digest and reviewed
+decision digest. Copied checkpoints retain recovery provenance; the original rows remain intact.
+All retained candidates remain pending. Explicit exclusions and coverage flags are visible in
+the report and candidate evidence. See [recovery](skill_import_recovery.md).
+
 The database records **what skills exist, where they came from, what a student attempted, what assistance was given, and what evidence justifies the current recommendation**. It is not a place to store arbitrary model confidence claims as ground truth.
 
 Use PostgreSQL on **Supabase**, SQLAlchemy 2.x and Alembic. Prefer normalised relational tables for durable records, with JSONB only for versioned model-generated specifications or provider-neutral diagnostic details. Use foreign keys, check constraints, unique indexes and immutable task/evidence versions; do not let agents write ad-hoc JSON directly into the production tables.

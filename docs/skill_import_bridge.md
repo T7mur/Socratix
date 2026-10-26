@@ -113,7 +113,9 @@ Repeat the command to resume. Fingerprints include artifacts, selected units, ac
 prompt/schema digests and resolved non-secret model configuration. Moving the artifact folder
 preserves identity; changing inputs creates a new run. A database advisory lock serializes the
 same fingerprint. Provider interruption preserves validated checkpoints. Semantic rejection
-requires regenerating that unit on the next invocation. A crash before checkpointing can incur
+now preserves/revalidates saved responses rather than silently regenerating them. Use the
+[saved proposal recovery workflow](skill_import_recovery.md) to resolve conflicting variants
+or evidence issues with explicit human decisions. A crash before checkpointing can incur
 another provider charge; exactly-once billing is not promised.
 
 JSON terminal output lists run ID, processed/skipped/blocked units, safe failure codes,

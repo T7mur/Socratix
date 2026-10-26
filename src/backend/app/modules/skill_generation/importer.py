@@ -18,6 +18,7 @@ from app.modules.skill_generation.candidates import (
     SkillCandidateBatch,
     validate_batches,
 )
+from app.modules.skill_generation.recovery import ResolvedRecovery
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -72,7 +73,8 @@ async def preflight(database, actor_id, prepared):
 
 
 async def import_prepared(database, gateway, settings, prepared, actor_id: UUID, permission_ref: str,
-                          *, dry_run=False, progress: ProgressCallback | None = None):
+                          *, dry_run=False, progress: ProgressCallback | None = None,
+                          recovery: ResolvedRecovery | None = None):
     total = sum(len(requests) for requests in prepared.requests.values())
     completed = 0
     run_id = None
@@ -87,13 +89,18 @@ async def import_prepared(database, gateway, settings, prepared, actor_id: UUID,
     notify("Checking database and permissions")
     await preflight(database, actor_id, prepared)
     config = import_configuration(settings, permission_ref, list(prepared.requests) + list(prepared.blocked))
+    if recovery is not None:
+        # Recovery identity records the original generation settings, not today's model/key.
+        config = {"recovery": recovery.provenance, "permission_ref": permission_ref,
+                  "sections": sorted(list(prepared.requests) + list(prepared.blocked))}
     fingerprint = checksum({"artifacts": prepared.artifact_digest, "configuration": config,
                             "actor_id": str(actor_id)})
     if dry_run:
-        notify("Dry run: review required" if prepared.blocked else "Dry run: ready")
+        review_needed = bool(prepared.blocked or (recovery and recovery.exclusions))
+        notify("Dry run: review required" if review_needed else "Dry run: ready")
         return {"dry_run": True, "fingerprint": fingerprint, "units": sorted(prepared.requests),
-                "blocked_units": prepared.blocked, "status": "review_required" if prepared.blocked else "ready"}, (
-                    2 if prepared.blocked else 0)
+                "blocked_units": prepared.blocked, "status": "review_required" if review_needed else "ready",
+                **({"operator_exclusions": recovery.exclusions} if recovery else {})}, (2 if review_needed else 0)
     if not prepared.requests:
         notify("No eligible units: review required")
         return {"status": "review_required", "blocked_units": prepared.blocked}, 2
@@ -101,8 +108,17 @@ async def import_prepared(database, gateway, settings, prepared, actor_id: UUID,
         async with database.sessions() as session, session.begin():
             run_id = await SkillImportRepository(session).start(
                 prepared, fingerprint, actor_id, permission_ref, config)
+            if recovery is not None:
+                repo = SkillImportRepository(session)
+                chunks = {str(c.chunk_id): c for c in await repo.chunks(run_id)}
+                for key, value in recovery.batches.items():
+                    if key not in chunks:
+                        raise ConflictError("Recovery contains an unexpected chunk")
+                    if chunks[key].status != "succeeded":
+                        await repo.checkpoint(run_id, key, status="running", result={
+                            "batch": value, "recovered_from": recovery.provenance})
         notify("Import started")
-        processed, skipped, failures = [], [], {}
+        processed, skipped, failures, failure_details = [], [], {}, {}
         for code, requests in sorted(prepared.requests.items()):
             unit_total = len(requests)
             notify("Loading unit checkpoints", code, unit_total=unit_total)
@@ -118,10 +134,12 @@ async def import_prepared(database, gateway, settings, prepared, actor_id: UUID,
                 for index, request in enumerate(requests, start=1):
                     chunk_id = request["user_data"]["chunk_id"]
                     chunk = chunks[chunk_id]
-                    if chunk.result and chunk.status in {"running", "succeeded"}:
+                    if chunk.result and "batch" in chunk.result:
                         batch = SkillCandidateBatch.model_validate(chunk.result["batch"])
                         phase = "Reused saved checkpoint"
                     else:
+                        if recovery is not None:
+                            raise ConflictError("Incomplete recovery snapshot; model requests are disabled")
                         async with database.sessions() as session, session.begin():
                             await SkillImportRepository(session).require_admin(actor_id)
                             await SkillImportRepository(session).check_source(prepared.source)
@@ -151,26 +169,35 @@ async def import_prepared(database, gateway, settings, prepared, actor_id: UUID,
                 processed.append(code)
                 notify("Unit saved; candidates await human review", code, unit_total, unit_total)
             except (ValidationError, ConflictError, ForbiddenError, LLMError, SQLAlchemyError) as exc:
-                error = ("provider_failure" if isinstance(exc, LLMError) else
+                error = (exc.code if isinstance(exc, LLMError) else
                          "persistence_failure" if isinstance(exc, SQLAlchemyError) else "unit_validation_failed")
                 failures[code] = error
+                if isinstance(exc, LLMError):
+                    failure_details[code] = {"code": error, "http_status": exc.status_code}
+                elif isinstance(exc, ValidationError):
+                    failure_details[code] = {"code": getattr(exc, "code", "unit_validation_failed"),
+                                             **getattr(exc, "details", {"message": str(exc)})}
+                else:
+                    failure_details[code] = {"code": error}
                 if error == "unit_validation_failed":
                     completed -= len(batches)
                 async with database.sessions() as session, session.begin():
                     repo = SkillImportRepository(session)
                     for request in requests:
                         # Keep valid checkpoints on a provider/persistence interruption.
-                        # Semantic unit rejection requires fresh generation on the next run.
+                        # Retain rejected proposals for explicit recovery, not paid blind regeneration.
                         await repo.checkpoint(run_id, request["user_data"]["chunk_id"],
                             status="failed" if error != "unit_validation_failed" else "review_required", error_code=error,
                             preserve_result=error != "unit_validation_failed")
                 notify(f"Unit stopped: {error}", code, len(batches), unit_total)
         status = ("failed" if any(e != "unit_validation_failed" for e in failures.values()) else
-                  "review_required" if failures or prepared.blocked else "succeeded")
+                  "review_required" if failures or prepared.blocked or (recovery and recovery.exclusions) else "succeeded")
         async with database.sessions() as session, session.begin():
             repo = SkillImportRepository(session)
             await repo.finish(run_id, status, {"processed_units": processed, "skipped_units": skipped,
-                "blocked_units": prepared.blocked, "failures": failures})
+                "blocked_units": prepared.blocked, "failures": failures, "failure_details": failure_details,
+                **({"recovery_source_run_id": recovery.provenance["source_run_id"],
+                    "operator_exclusions": recovery.exclusions} if recovery else {})})
             report = await repo.report(run_id)
         notify(f"Import {status}")
         return report, 1 if status == "failed" else 2 if status == "review_required" else 0

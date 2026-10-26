@@ -71,6 +71,9 @@ async def test_import_resume_evidence_and_human_approval(scenario, settings):
     assert all(chunk["checkpointed"] for chunk in report["chunks"])
     async with database.sessions() as session:
         assert await SkillImportRepository(session).latest_run(actor) == UUID(report["run_id"])
+        saved = await SkillImportRepository(session).recovery_snapshot(UUID(report["run_id"]), actor, prepared)
+        assert saved["source_run_id"] == report["run_id"]
+        assert len(saved["batches"]) == 1
     again, code = await import_prepared(database, gateway, settings, prepared, actor, "permission:test")
     assert code == 0 and again["run_id"] == report["run_id"] and gateway.calls == 1
     assert again["skipped_units"] == ["AI-Demo"]

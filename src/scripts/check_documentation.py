@@ -16,6 +16,8 @@ DOCUMENTS = [
     "docs/adr/0003-durable-skill-import.md",
     "docs/skill_import_bridge.md",
     "docs/skill_import_handoff.md",
+    "docs/skill_import_recovery.md",
+    "docs/adr/0004-saved-skill-recovery.md",
 ]
 
 

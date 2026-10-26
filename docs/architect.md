@@ -19,6 +19,11 @@ await A/F review; hosted end-to-end operation is not claimed.
 
 ## Mission and scope
 
+Proposed recovery reads inactive matching checkpoints and requires explicit choices for semantic
+conflicts/evidence repairs. It performs zero model requests, uses the existing ledger for an
+auditable derived run, and keeps publication under the existing human review service. See
+[saved proposal recovery](skill_import_recovery.md). No new API, table or approval policy is added.
+
 Socratix helps Informatics students become **independent problem solvers** through diagnostic recall → understanding → transfer, verified personalised exercises and projects, four-stage Socratic assistance, reflective planning, and delayed unaided reassessment. Optimize for subsequent unassisted performance, **not** for number of tasks solved with AI.
 
 **Included MVP:** CS2023-inspired skill graph with human approval; student-selected planning tags; proposed 40/35/25 selection heuristic; single- and multi-skill Python exercises; milestone-based Python projects; isolated grading; adaptive four-level hints; evidence-based gap estimates; manual review; Next.js frontend; FastAPI + ELM; Supabase PostgreSQL.

@@ -19,6 +19,15 @@ This is a **human-readable ledger of meaningful design changes** (not a substitu
 
 ## Baseline
 
+### 2026-10-26 — Recover saved skill proposals without model regeneration (Proposed)
+- **Owner / branch / PR:** JK / jk/skill_import_progress / pending; user explicitly authorised continuing on this feature branch after separate-branch creation was declined.
+- **Before:** Conflicting candidate IDs reject a unit; semantic failures cause paid regeneration on rerun. Provider configuration, HTTP and output failures all appear as provider_failure.
+- **After:** A recovery CLI creates an operator review file from an inactive run's immutable snapshot, requiring explicit variant selections and reasons for evidence repairs/exclusions. A separate fingerprinted derived run copies selected results without model calls and validates before pending publication. Original results remain intact. Identical semantic content may union verified citations; different meanings never merge automatically. Safe typed diagnostics distinguish HTTP/auth/rate-limit/connection/output failures.
+- **Impact:** Internal operator JSON/recovery path, canonical DTO reuse, ledger provenance and documentation; no migrations or public API/DTO changes. Excluded chunks keep the derived run review_required even when valid candidates enter the admin queue.
+- **Verification:** Conflict/repair/missing-dependency/input-digest tests, no-provider recovery/resume tests, safe error redaction, read-only inspection of real saved drafts. Human resolution and academic approval remain separate.
+- **Reviewers / decision date:** Members A/F / pending.
+- **ADR:** [Saved proposal recovery](../adr/0004-saved-skill-recovery.md).
+
 ### 2026-10-26 — Import progress and active-run monitoring (Proposed)
 - **Owner / branch / PR:** JK / jk/skill_import_progress / pending.
 - **Before:** Import CLI prints a report only at completion; an active model request appears silent.

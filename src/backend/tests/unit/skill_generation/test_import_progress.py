@@ -100,6 +100,7 @@ async def test_cli_keeps_json_stdout_separate_from_progress(cli, monkeypatch, ca
     args = SimpleNamespace(no_progress=quiet, target="development", artifacts=Path("synthetic"),
                            section=None, permission_ref="permission:synthetic", actor_id=uuid4(),
                            watch_run=None, report_run=None, dry_run=False)
+    args.from_run, args.resolutions = None, None
     assert await cli.run(args) == 0
     output = capsys.readouterr()
     assert json.loads(output.out) == {"status": "succeeded"}

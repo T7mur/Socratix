@@ -25,6 +25,13 @@ Use namespaced `skill_id` (e.g. `cs2023:AL.unit_topic`, `python.conditionals`) a
 
 ## CS2023 ingestion strategy
 
+Saved-response recovery is implemented as a proposed operator workflow. It combines verified
+citations only for exactly identical semantic payloads; genuine ID conflicts require an explicit
+human variant selection. Evidence repairs/exclusions need reasons and full revalidation. A
+separate derived run records provenance and stages pending candidates without provider calls;
+the source run is never overwritten. Exclusions keep incomplete coverage review-required.
+See [recovery steps](skill_import_recovery.md) and [ADR 0004](adr/0004-saved-skill-recovery.md).
+
 The operator bridge emits optional internal `ImportProgress` observations for preflight,
 model waits, saved/reused checkpoints, unit validation/commit and final outcome. These are
 display-only and do not alter persistence, model request identity or academic approval.

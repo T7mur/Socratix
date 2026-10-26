@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 from jsonschema import validators
-from openai import APIConnectionError, APIStatusError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 from referencing import Registry
 from referencing.exceptions import Unresolvable
@@ -17,18 +17,23 @@ from app.core.llm_config import LLMSettings
 
 class LLMError(Exception):
     """Safe to display; never contains upstream bodies or input values."""
+    code = "provider_failure"
+    status_code = None
 
 
 class LLMConfigurationError(LLMError):
-    pass
+    code = "llm_configuration"
 
 
 class LLMProviderError(LLMError):
-    pass
+    def __init__(self, message, *, code="provider_failure", status_code=None):
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
 
 
 class LLMOutputError(LLMError):
-    pass
+    code = "invalid_model_output"
 
 
 class ELMGateway:
@@ -133,7 +138,13 @@ class ELMGateway:
             except (APIConnectionError, APIStatusError) as exc:
                 retry = isinstance(exc, APIConnectionError) or exc.status_code in {408, 429} or exc.status_code >= 500
                 if not retry or attempt + 1 == self.settings.elm_max_attempts:
-                    raise LLMProviderError("LLM endpoint request failed") from None
+                    status = exc.status_code if isinstance(exc, APIStatusError) else None
+                    code = ("provider_timeout" if isinstance(exc, APITimeoutError) or status == 408 else
+                            "provider_connection" if isinstance(exc, APIConnectionError) else
+                            "provider_auth" if status in {401, 403} else
+                            "provider_rate_limit" if status == 429 else
+                            "provider_server" if status and status >= 500 else "provider_request")
+                    raise LLMProviderError("LLM endpoint request failed", code=code, status_code=status) from None
                 await asyncio.sleep(min(0.5 * 2 ** attempt, 4))
                 continue
             except Exception:

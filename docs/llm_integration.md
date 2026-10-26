@@ -51,6 +51,11 @@ FastAPI lifespan exposes `app.state.llm_gateway` and closes it at shutdown. Work
 compose their own gateway with the same lifecycle. Cancellation propagates.
 Typed safe failures: `LLMConfigurationError`, `LLMProviderError`, `LLMOutputError`, all
 under `LLMError`. No provider body, prompt or validation value is included in messages.
+Safe exception metadata now distinguishes configuration, HTTP authentication/rate-limit/server/
+request failure, connection/timeout and invalid model output using `code`; `status_code` is
+included only for an HTTP failure. Import reports retain these fields under `failure_details`.
+No provider body, headers, prompt or schema validation input is included. Old generic failure
+records cannot retrospectively supply these details. Saved-response recovery constructs no provider.
 SDK/transport loggers are disabled to prevent debug body leakage. No new public routes,
 DTOs, DB migrations, persistence or frontend code are introduced. Domain owners map failures
 to existing job/503 and human-review policies.

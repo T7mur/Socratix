@@ -69,6 +69,31 @@ class Answer(BaseModel):
     answer: str
 
 
+@pytest.mark.parametrize(("status", "code"), [(401, "provider_auth"), (403, "provider_auth"),
+    (429, "provider_rate_limit"), (500, "provider_server"), (400, "provider_request")])
+async def test_provider_diagnostics_include_only_safe_code_and_status(status, code):
+    def handle(request):
+        return httpx.Response(status, json={"error": {"message": "private-key=DO_NOT_EXPOSE"}})
+    async with ELMGateway(settings(), transport=httpx.MockTransport(handle)) as gateway:
+        with pytest.raises(LLMProviderError) as caught:
+            await gateway.generate_text(**REQUEST)
+    assert caught.value.code == code and caught.value.status_code == status
+    assert "DO_NOT_EXPOSE" not in str(caught.value)
+
+
+async def test_timeout_diagnostic_is_distinct_from_invalid_model_output():
+    def timeout(request):
+        raise httpx.ReadTimeout("private timeout detail", request=request)
+    async with ELMGateway(settings(), transport=httpx.MockTransport(timeout)) as gateway:
+        with pytest.raises(LLMProviderError) as caught:
+            await gateway.generate_text(**REQUEST)
+    assert caught.value.code == "provider_timeout" and caught.value.status_code is None
+    async with ELMGateway(settings(), transport=httpx.MockTransport(lambda _: completion("not JSON"))) as gateway:
+        with pytest.raises(LLMOutputError) as caught:
+            await gateway.generate_json(**REQUEST, schema=Answer)
+    assert caught.value.code == "invalid_model_output"
+
+
 async def test_pydantic_json_repair_and_alias():
     seen = []
     def handle(request):

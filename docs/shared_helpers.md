@@ -26,6 +26,23 @@ and persistence in F. Student activity generation jobs cannot represent curricul
 
 ## Backend
 
+Recovery additions (implemented proposal, A/F review pending):
+
+| Import path / owner | Inputs → outputs | Effects and errors | Tests |
+|---|---|---|---|
+| `app.modules.skill_generation.candidates.semantic_payload`, `CandidateValidationError` / A | canonical payload → exact meaning without citation list; structural error → safe code/resource identifiers | Sync/pure. Identical meanings union verified citations; differing meanings still reject. No inferred merge or approval | `test_recovery.py` |
+| `app.db.repositories.skill_imports.SkillImportRepository.recovery_snapshot` / F | inactive source run, active admin, prepared artifacts → matching saved batches/configuration | Async read-only, caller-owned transaction. Rejects active/missing/mismatched/incomplete snapshots with Forbidden/NotFound/ConflictError. Original rows unchanged | Disposable import tests |
+| `app.modules.skill_generation.recovery.make_recovery_review` / A | prepared artifacts, saved snapshot, approved graph → JSON review template | Sync/pure. Groups canonical semantic variants; lists local evidence issues with null choices. Invalid saved schema raises safe ValidationError | `test_recovery.py` |
+| `app.modules.skill_generation.recovery.resolve_recovery_review` / A | original inputs + edited review → ResolvedRecovery | Sync/pure. Requires listed variants, nonblank reasons, valid canonical repairs/exclusions, matching digests, full-unit validation. Never selects an academic interpretation automatically; raises ValidationError before persistence | `test_recovery.py` |
+| `app.modules.skill_generation.recovery.write_recovery_review` / A | review template, output root → JSON path and sibling Markdown | Sync local file writes using exclusive creation; preserves existing operator edits. OSError on unavailable output. Example: prepare with CLI `--from-run UUID` | Artifact preservation tests |
+
+`import_prepared(..., recovery=resolved)` copies validated saved batches into a separate
+fingerprinted run, with no provider constructed by the CLI. Original responses and their
+configuration remain auditable. Optional exclusions keep review_required and flag candidates.
+Normal resumes also retain semantically rejected JSON, avoiding blind paid regeneration.
+Typed gateway error metadata is safe code/status only. Reuse decision: canonical DTOs, existing
+validator, checksums, private ledger and admin review; no parallel catalogue or approval path.
+
 Progress additions (implemented draft, A/F review pending):
 
 | Import path / owner | Inputs → outputs | Effects / errors | Tests |

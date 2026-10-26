@@ -72,6 +72,23 @@ ignored `outputs/`. Authoritative import records/reports require reviewed 0006 d
 
 ## Remaining external gates
 
+Recovery follow-up — 2026-10-26, current feature branch explicitly authorised by the user:
+`--from-run` prepares a comparison and JSON decision file from inactive saved checkpoints.
+`--resolutions` validates explicit variant/evidence decisions and creates a separate derived
+run without constructing a provider. Normal retries now retain semantically rejected saved
+responses rather than paying to regenerate them. Identical meaning can union verified citations;
+different meanings require human choices. Safe error codes/status and conflicting IDs appear
+under `failure_details`. Original records and public contracts are unchanged. Exclusions keep
+coverage review-required. See [recovery guide](skill_import_recovery.md).
+
+Verification: 166 backend tests passed, 18 skipped; lint, local guide links and diff checks
+passed. Real run `37f6836a-413b-473a-916c-79073414357e` was read to prepare eight conflicting-ID
+choices and three evidence decisions, with zero model calls or catalogue writes. The generated
+comparison/review is under ignored `outputs/skill-import-recovery/<source-run-id>/`. Choices
+remain unset; no academic interpretation was selected and no recovered candidates were staged.
+Disposable-database transaction tests remain skipped; this follow-up does not claim live recovery
+persistence or provider access was verified.
+
 Progress follow-up — 2026-10-26, branch `jk/skill_import_progress`: default stderr progress now
 shows checkpoint counts, current unit/chunk, model-wait phase and elapsed time, with an async
 heartbeat. `--watch-run UUID|latest` polls an existing run read-only; Ctrl+C stops only the

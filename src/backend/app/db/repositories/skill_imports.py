@@ -195,6 +195,30 @@ class SkillImportRepository:
             raise NotFoundError("No import run found for this actor")
         return run_id
 
+    async def recovery_snapshot(self, run_id, actor_id, prepared):
+        """Read-only snapshot of inactive matching saved batches, including rejected results."""
+        await self.require_admin(actor_id)
+        run = await self.session.get(SkillImportRun, run_id)
+        if run is None:
+            raise NotFoundError("Source import run not found")
+        if run.status in {"queued", "running"}:
+            raise ConflictError("The source import must finish or stop before recovery")
+        if run.source_id != UUID(prepared.source["source_id"]):
+            raise ConflictError("Recovery artifacts belong to a different source")
+        await self.check_source(prepared.source)
+        chunks = {str(c.chunk_id): c for c in await self.chunks(run_id)}
+        batches = {}
+        for requests in prepared.requests.values():
+            for request in requests:
+                key = request["user_data"]["chunk_id"]
+                chunk = chunks.get(key)
+                if chunk is None or chunk.request_digest != checksum(request):
+                    raise ConflictError("Recovery request identity differs from the saved import")
+                if not chunk.result or "batch" not in chunk.result:
+                    raise ConflictError("Recovery requires saved results for every selected chunk")
+                batches[key] = chunk.result["batch"]
+        return {"source_run_id": str(run.id), "configuration": run.configuration, "batches": batches}
+
     async def evidence(self, kind, key, version):
         # Keep pre-bridge catalogue review usable while proposed migration 0006 awaits review.
         if await self.session.scalar(text("SELECT to_regclass('socratix.skill_candidate_evidence')")) is None:
