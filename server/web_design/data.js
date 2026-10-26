@@ -130,9 +130,9 @@ window.SAMPLE = {
     explanation_questions: ["Why is the result for 3 different from 4?"],
     verification_status: "verified", human_review_status: "not_required",
     stages: [
-      { stage: "recall", label: "Recall", detail: "Boolean operators", state: "done" },
-      { stage: "understanding", label: "Understanding", detail: "Predict the branch", state: "done" },
-      { stage: "transfer", label: "Transfer", detail: "Write stock_status", state: "current" },
+      { stage: "recall", label: "Recall", detail: "Retrieval question", grading: "rubric", state: "done" },
+      { stage: "understanding", label: "Understanding", detail: "Predict & explain", grading: "rubric", state: "done" },
+      { stage: "transfer", label: "Transfer", detail: "Code + explanation", grading: "auto-tested", state: "current" },
     ],
   },
 

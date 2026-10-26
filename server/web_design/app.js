@@ -34,7 +34,9 @@
     reflection: { step: "write", confidence: 40, difficulty: "hard", evidence: true, tags: new Set(["python.conditionals"]) },
     review: { filter: "all", selected: "rv-1", decisions: {} },
     settings: { evidence: true, research: false },
+    theme: (() => { try { return localStorage.getItem("socratix-theme") === "light" ? "light" : "dark"; } catch { return "dark"; } })(),
   };
+  document.documentElement.dataset.theme = state.theme;
 
   // ---------- helpers ----------
   const app = document.getElementById("app");
@@ -42,6 +44,7 @@
   const icon = (n, extra = "") => `<i data-lucide="${n}" ${extra}></i>`;
   const skill = (id) => D.skills.find((s) => s.skill_id === id) || { skill_id: id, name: id.replace("python.", "").replace(/_/g, " ") };
   const chip = (id, cls = "") => `<span class="chip ${cls}">${esc(id)}</span>`;
+  const themeToggle = () => `<div class="theme-toggle" role="group" aria-label="Colour mode">${[["dark", "moon", "Dark mode"], ["light", "sun", "Light mode"]].map(([m, ic, l]) => `<button type="button" data-theme-set="${m}" aria-pressed="${state.theme === m}" aria-label="${l}" title="${l}">${icon(ic)}</button>`).join("")}</div>`;
   const idx = (v) => (v == null ? "—" : v.toFixed(2));
   const ACTIVITY = { single_skill_exercise: "Single-skill exercise", multi_skill_exercise: "Multi-skill exercise", project: "Project" };
   const STAGE = { recall: "Recall", understanding: "Understanding", transfer: "Transfer" };
@@ -75,7 +78,7 @@
     { id: "dashboard", label: "Dashboard", icon: "layout-dashboard", href: "#/dashboard" },
     { id: "plan", label: "Plan", icon: "target", href: "#/plan" },
     { id: "skills", label: "Skills", icon: "network", href: "#/skills" },
-    { id: "learn", label: "Exercise", icon: "code-xml", href: "#/learn/stock-status", count: "1" },
+    { id: "learn", label: "Exercise", icon: "book-open-check", href: "#/learn/stock-status", count: "1" },
     { id: "projects", label: "Project", icon: "folder-kanban", href: "#/projects/cafe-terminal" },
     { id: "reflection", label: "Reflection", icon: "notebook-pen", href: "#/reflection" },
   ];
@@ -125,7 +128,7 @@
     <div class="shell">
       <aside class="rail ${state.navOpen ? "open" : ""}" aria-label="Main">
         <div class="brand">
-          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="none" stroke="rgba(236,233,226,.24)"/><circle cx="10" cy="11" r="3.5" fill="none" stroke="#ece9e2" stroke-width="1.6"/><circle cx="22" cy="11" r="3.5" fill="none" stroke="#ece9e2" stroke-width="1.6"/><circle cx="16" cy="22" r="3.5" fill="#ece9e2"/><path d="M12.3 13.6 14.5 19M19.7 13.6 17.5 19" stroke="#ece9e2" stroke-width="1.6"/></svg>
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="none" style="stroke:var(--line-2)"/><circle cx="10" cy="11" r="3.5" fill="none" style="stroke:var(--ink)" stroke-width="1.6"/><circle cx="22" cy="11" r="3.5" fill="none" style="stroke:var(--ink)" stroke-width="1.6"/><circle cx="16" cy="22" r="3.5" style="fill:var(--ink)"/><path d="M12.3 13.6 14.5 19M19.7 13.6 17.5 19" style="stroke:var(--ink)" stroke-width="1.6"/></svg>
           <span class="brand-name">Socratix</span>
         </div>
         <nav class="nav">
@@ -154,6 +157,7 @@
           <div class="crumbs">${r.parent ? `<span class="hide-sm">${r.parent}</span>${icon("chevron-right", 'class="hide-sm"')}` : ""}<b>${r.title}</b></div>
           <span class="spacer"></span>
           <span class="sample-pill" title="All names, numbers and activity on these screens are synthetic.">${icon("flask-conical")}<span>Sample data<span class="long"> · design prototype</span></span></span>
+          ${themeToggle()}
         </header>
         <main id="content" class="page fade-in">${body}</main>
       </div>
@@ -197,7 +201,7 @@
       </div>
       <div class="page-actions">
         <a class="btn" href="#/plan">${icon("target")}Edit plan</a>
-        <a class="btn" href="#/learn/stock-status">${icon("code-xml")}Resume exercise</a>
+        <a class="btn" href="#/learn/stock-status">${icon("book-open-check")}Resume exercise</a>
       </div>
     </div>
 
@@ -425,10 +429,10 @@
     return `
     <svg class="graph" viewBox="0 0 880 ${GH}" role="group" aria-label="Skill graph: prerequisite edges between approved skills">
       <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="rgba(236,233,226,.5)" stroke-width="1.4"/></marker>
-        <marker id="arrow-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="#ece9e2" stroke-width="1.6"/></marker>
-        <marker id="arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="#e9bb62" stroke-width="1.4"/></marker>
-        <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="transparent"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(236,233,226,.28)" stroke-width="1.5"/></pattern>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" style="stroke:var(--line-3)" stroke-width="1.4"/></marker>
+        <marker id="arrow-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" style="stroke:var(--ink)" stroke-width="1.6"/></marker>
+        <marker id="arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" style="stroke:var(--warn)" stroke-width="1.4"/></marker>
+        <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="transparent"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:rgba(var(--ink-rgb),.28)" stroke-width="1.5"/></pattern>
       </defs>
       <rect class="area" x="6" y="6" width="868" height="${GH - 12}" rx="10"/>
       <text class="area-label" x="22" y="32">Fundamental programming concepts · part_of grouping</text>
@@ -495,13 +499,13 @@
         <div class="panel-body" style="padding-top:20px">
           ${v === "graph" ? `<div class="graph-wrap">${graphSvg()}</div>
           <div class="legend" style="margin-top:14px">
-            <span><svg viewBox="0 0 28 10" aria-hidden="true"><path d="M0 5 H24" stroke="rgba(236,233,226,.5)"/><path d="M20 1 L25 5 L20 9" fill="none" stroke="rgba(236,233,226,.5)"/></svg>prerequisite → skill (requires)</span>
-            <span><svg viewBox="0 0 28 10" aria-hidden="true"><path d="M0 5 H24" stroke="#e9bb62" stroke-dasharray="4 3"/></svg>proposed, under review</span>
+            <span><svg viewBox="0 0 28 10" aria-hidden="true"><path d="M0 5 H24" style="stroke:var(--line-3)"/><path d="M20 1 L25 5 L20 9" fill="none" style="stroke:var(--line-3)"/></svg>prerequisite → skill (requires)</span>
+            <span><svg viewBox="0 0 28 10" aria-hidden="true"><path d="M0 5 H24" style="stroke:var(--warn)" stroke-dasharray="4 3"/></svg>proposed, under review</span>
             <span><i class="sw" style="background:var(--recall)"></i>recall</span>
             <span><i class="sw" style="background:var(--understand)"></i>understanding</span>
             <span><i class="sw" style="background:var(--transfer)"></i>transfer</span>
-            <span><i class="sw" style="background:repeating-linear-gradient(135deg,rgba(236,233,226,.35) 0 2px,transparent 2px 4px)"></i>insufficient evidence</span>
-            <span><svg viewBox="0 0 10 10" style="width:10px" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="none" stroke="#e9bb62" stroke-width="1.5"/></svg>check due</span>
+            <span><i class="sw" style="background:repeating-linear-gradient(135deg,rgba(var(--ink-rgb),.35) 0 2px,transparent 2px 4px)"></i>insufficient evidence</span>
+            <span><svg viewBox="0 0 10 10" style="width:10px" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="none" style="stroke:var(--warn)" stroke-width="1.5"/></svg>check due</span>
           </div>` : `
           <div class="table-wrap"><table class="data skill-list">
             <thead><tr><th>Skill</th><th>Prerequisites</th><th>Recall</th><th>Understanding</th><th>Transfer</th><th>Evidence</th><th>Confidence</th></tr></thead>
@@ -596,7 +600,7 @@
         <h1>${t.title}</h1>
         <div class="row" style="margin-top:8px">
           <span class="badge b-neutral plain">${ACTIVITY[t.activity_type]}</span>${stageBadge(t.assessment_stage)}
-          <span class="badge b-pass">verified</span>${t.target_skill_ids.map((s) => chip(s)).join("")}
+          <span class="badge b-pass" title="Passed QA checks: the reference solution passes and the tests catch faulty versions. Not proof of perfect teaching quality.">verified</span>${t.target_skill_ids.map((s) => chip(s)).join("")}
         </div>
       </div>
       <div class="page-actions"><span class="small faint mono">task v${t.task_version} · ${t.outcome_ids[0]}</span></div>
@@ -607,7 +611,7 @@
         <div class="panel-head"><h2 id="task-h">Task</h2><span class="sub">~15 min</span></div>
         <div class="panel-body stack-sm" style="gap:16px">
           <nav class="stage-track" aria-label="Assessment stages">
-            ${t.stages.map((s) => `<button type="button" style="--stage-c:var(--${s.stage === "understanding" ? "understand" : s.stage})" ${s.state === "current" ? 'aria-current="step"' : ""} data-toast="${s.state === "done" ? `${s.label} stage completed on Thu 23 Oct.` : "You are on the transfer stage."}"><span><span class="sdot"></span>${s.label}</span><span class="st-state">${s.state === "done" ? "Done" : "Now"}</span><small style="grid-column:1/-1">${s.detail}</small></button>`).join("")}
+            ${t.stages.map((s) => `<button type="button" style="--stage-c:var(--${s.stage === "understanding" ? "understand" : s.stage})" ${s.state === "current" ? 'aria-current="step"' : ""} data-toast="${s.state === "done" ? `${s.label} stage completed on Thu 23 Oct, graded with a rubric.` : "You are on the transfer stage: code and explanation, checked by automatic tests."}"><span><span class="sdot"></span>${s.label}</span><span class="st-state">${s.state === "done" ? "Done" : "Now"}</span><small style="grid-column:1/-1">${s.detail} · ${s.grading}</small></button>`).join("")}
           </nav>
           <p>${esc(t.student_brief)}</p>
           <div class="sig">${hlPy(`def ${t.function_contract.name}(${t.function_contract.parameters.map((p) => `${p.name}: ${p.type}`).join(", ")}) -> ${t.function_contract.returns}:`)}</div>
@@ -679,7 +683,7 @@
     const box = (x, y, w, t, s) => `<g class="dc-box"><rect x="${x}" y="${y}" width="${w}" height="52" rx="6"/><text x="${x + 12}" y="${y + 22}">${t}</text><text class="s" x="${x + 12}" y="${y + 39}">${s}</text></g>`;
     return `
     <div class="design-canvas"><svg viewBox="0 0 640 320" role="img" aria-label="Your design: main loop calls show_menu, read_choice, add_to_cart and checkout; cart is two parallel lists">
-      <defs><marker id="dc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="#e9bb62" stroke-width="1.4"/></marker></defs>
+      <defs><marker id="dc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" style="stroke:var(--warn)" stroke-width="1.4"/></marker></defs>
       <path class="dc-wire" d="M150 60 C 200 60, 200 40, 250 40"/><path class="dc-wire" d="M150 60 C 200 60, 200 120, 250 120"/>
       <path class="dc-wire" d="M150 60 C 200 60, 200 200, 250 200"/><path class="dc-wire" d="M150 60 C 200 60, 200 280, 250 280"/>
       <path class="dc-wire" d="M420 200 L 470 200"/><path class="dc-wire" d="M420 280 C 445 280, 445 220, 470 220"/>
@@ -689,7 +693,7 @@
       ${box(250, 174, 170, "add_to_cart(i, qty)", "PR5 · M4")}
       ${box(250, 254, 170, "checkout()", "M5")}
       ${box(470, 184, 150, "cart", "items[], qtys[]")}
-      <path class="dc-wire" d="M462 106 H 428" stroke="#e9bb62" marker-end="url(#dc-arrow)"/><g class="dc-note"><text x="468" y="110">validate before int()?</text></g>
+      <path class="dc-wire" d="M462 106 H 428" style="stroke:var(--warn)" marker-end="url(#dc-arrow)"/><g class="dc-note"><text x="468" y="110">validate before int()?</text></g>
     </svg></div>`;
   }
 
@@ -923,6 +927,7 @@
     const steps = ["Plan", "Practise", "Hint", "Reflect", "Reassess"];
     return `
     <div class="login">
+      <div class="login-theme">${themeToggle()}</div>
       <section class="login-art">
         <div class="brand"><span class="brand-name" style="font-size:1.25rem">Socratix</span></div>
         <div class="stack-sm" style="gap:20px">
@@ -955,6 +960,13 @@
 
   function bind(id) {
     app.querySelectorAll("[data-toast]").forEach((b) => b.addEventListener("click", () => toast(b.dataset.toast)));
+    app.querySelectorAll("[data-theme-set]").forEach((b) => b.addEventListener("click", () => {
+      state.theme = b.dataset.themeSet;
+      document.documentElement.dataset.theme = state.theme;
+      try { localStorage.setItem("socratix-theme", state.theme); } catch {}
+      render();
+      const f = app.querySelector(`[data-theme-set="${state.theme}"]`); f && f.focus();
+    }));
     app.querySelectorAll("[data-role]").forEach((b) => b.addEventListener("click", () => { state.role = b.dataset.role; render(); }));
     const nb = app.querySelector('[data-act="nav"]');
     if (nb) nb.addEventListener("click", () => { state.navOpen = !state.navOpen; app.querySelector(".rail").classList.toggle("open", state.navOpen); nb.setAttribute("aria-expanded", state.navOpen); });
