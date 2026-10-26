@@ -83,6 +83,32 @@ edits are explicit. Accepted records and old graph versions remain unchanged.
 
 ## Resume, reports and storage
 
+Progress appears automatically on stderr: checkpointed chunks/total, current unit/chunk,
+model-wait state, elapsed time and run UUID. The terminal bar refreshes while a model call is
+pending; redirected output uses event lines and a 15-second heartbeat. `--no-progress` silences
+this display. Final JSON remains on stdout. A full chunk bar is not publication or approval:
+whole-unit validation/save must still succeed, followed by human review.
+
+For a run already started with older code, open another terminal at the repository root:
+
+```powershell
+uv run --project src/backend python src/scripts/import_skills.py --watch-run latest --actor-id REVIEWER_UUID --target development
+```
+
+`latest` selects the supplied actor's newest queued/running run, falling back to their newest
+finished run, and stays pinned to that run. You can supply an explicit UUID instead. This
+polls the database every two seconds, with no model calls or database writes; it works with
+already-running imports. It shows durable checkpoint progress and coarse chunk-processing
+status, not provider retries or token streaming. Watch elapsed time starts when the watcher
+starts. Ctrl+C stops only the watcher. If the original process died without finalising its
+ledger, a watcher cannot infer that; repeat the original import command to resume as appropriate.
+After terminal status, the watcher prints the final report and regenerates its local report file.
+
+Changes to the runner cannot add a bar inside an already-started Python process. Use the
+watcher for that process. New imports show progress automatically; changing the display does
+not change import fingerprints or invalidate checkpoints. Resume only after the original runner
+has stopped; do not start a competing importer just to obtain progress output.
+
 Repeat the command to resume. Fingerprints include artifacts, selected units, actor, permission,
 prompt/schema digests and resolved non-secret model configuration. Moving the artifact folder
 preserves identity; changing inputs creates a new run. A database advisory lock serializes the

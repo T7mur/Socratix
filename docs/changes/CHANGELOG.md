@@ -19,6 +19,14 @@ This is a **human-readable ledger of meaningful design changes** (not a substitu
 
 ## Baseline
 
+### 2026-10-26 — Import progress and active-run monitoring (Proposed)
+- **Owner / branch / PR:** JK / jk/skill_import_progress / pending.
+- **Before:** Import CLI prints a report only at completion; an active model request appears silent.
+- **After:** Show checkpoint progress, current unit/chunk, model-wait status and elapsed time on stderr. Add read-only `--watch-run UUID|latest` for already-running imports and `--no-progress` for quiet operation. Keep final JSON on stdout and preserve import fingerprints/checkpoint semantics.
+- **Impact:** Internal optional progress callback, operator display/watcher, additive checkpoint flag in operator reports and helper/component docs. No public API, migration, provider capability or academic policy changes.
+- **Verification:** Mocked orchestration/monitoring/display tests, resume/failure/cancellation and stdout/stderr separation; no live model requests or running-process interruption required.
+- **Reviewers / decision date:** Member A/F / pending.
+
 ### 2026-10-25 — Durable skill import bridge (Proposed)
 - **Owner / branch / PR:** JK, A/F integration / jk/skill_import_bridge / pending.
 - **Before:** PDF artifacts, provider gateway and catalogue review operate independently; signup has no credentialed verification.

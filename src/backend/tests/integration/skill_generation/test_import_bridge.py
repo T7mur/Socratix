@@ -1,6 +1,6 @@
 """Requires the explicit disposable PostgreSQL fixture; never targets the application project."""
 import copy
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from app.contracts.enums import ResourceType
@@ -10,7 +10,7 @@ from app.db.models.curriculum import CatalogueRevision, SourceSpan
 from app.db.models.identity import User
 from app.db.models.skill_imports import SkillCandidateEvidence, SkillImportRun
 from app.db.repositories.catalogue import CatalogueRepository
-from app.db.repositories.skill_imports import import_lock
+from app.db.repositories.skill_imports import SkillImportRepository, import_lock
 from app.db.session import Database
 from app.integrations.elm import LLMProviderError
 from app.modules.skill_generation.import_artifacts import PreparedImport
@@ -68,6 +68,9 @@ async def test_import_resume_evidence_and_human_approval(scenario, settings):
     database, actor, _, prepared, gateway, _ = scenario
     report, code = await import_prepared(database, gateway, settings, prepared, actor, "permission:test")
     assert code == 0 and report["pending_review_count"] == 1 and gateway.calls == 1
+    assert all(chunk["checkpointed"] for chunk in report["chunks"])
+    async with database.sessions() as session:
+        assert await SkillImportRepository(session).latest_run(actor) == UUID(report["run_id"])
     again, code = await import_prepared(database, gateway, settings, prepared, actor, "permission:test")
     assert code == 0 and again["run_id"] == report["run_id"] and gateway.calls == 1
     assert again["skipped_units"] == ["AI-Demo"]

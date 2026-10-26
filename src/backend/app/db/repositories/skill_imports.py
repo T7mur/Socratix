@@ -180,7 +180,20 @@ class SkillImportRepository:
                 "fingerprint": run.fingerprint, **run.summary, "candidates": list(resources.values()),
                 "pending_review_count": pending, "human_review_required": pending > 0,
                 "chunks": [{"chunk_id": str(c.chunk_id), "section": c.section_code,
-                            "status": c.status, "error_code": c.error_code} for c in chunks]}
+                            "status": c.status, "error_code": c.error_code,
+                            "checkpointed": bool(c.result and c.status in {"running", "succeeded"})}
+                           for c in chunks]}
+
+    async def latest_run(self, actor_id):
+        """Most recent active run for this actor, otherwise their most recent run. Read-only."""
+        query = select(SkillImportRun.id).where(SkillImportRun.actor_id == actor_id).order_by(
+            SkillImportRun.created_at.desc(), SkillImportRun.id.desc()).limit(1)
+        run_id = await self.session.scalar(query.where(SkillImportRun.status.in_(["queued", "running"])))
+        if run_id is None:
+            run_id = await self.session.scalar(query)
+        if run_id is None:
+            raise NotFoundError("No import run found for this actor")
+        return run_id
 
     async def evidence(self, kind, key, version):
         # Keep pre-bridge catalogue review usable while proposed migration 0006 awaits review.

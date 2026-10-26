@@ -150,3 +150,34 @@ async def test_rejected_unit_never_reaches_candidate_persistence(boundary, monke
     assert code == 2 and not state.persisted
     assert report["failures"] == {"AI-Demo": "unit_validation_failed"}
     assert all(r.status == "review_required" for r in state.rows.values())
+
+
+async def test_progress_counts_saved_and_resumed_chunks(boundary):
+    events = []
+    await execute(boundary, progress=events.append)
+    waits = [e for e in events if e.phase == "Waiting for model"]
+    checkpoints = [e.completed for e in events if e.phase == "Model result checkpointed"]
+    assert [e.chunk_index for e in waits] == [1, 2]
+    assert checkpoints == [1, 2] and all(e.total == 2 for e in events)
+    assert events[-1].phase == "Import succeeded" and events[-1].completed == 2
+    assert any(e.run_id for e in events)
+    events.clear()
+    await execute(boundary, progress=events.append)
+    assert not any(e.phase == "Waiting for model" for e in events)
+    assert events[-1].completed == 2 and boundary[-1].calls == 2
+
+
+async def test_progress_preserves_checkpoint_count_on_provider_failure(boundary):
+    boundary[-1].fail = 2
+    events = []
+    await execute(boundary, progress=events.append)
+    assert events[-1].phase == "Import failed" and events[-1].completed == 1
+
+
+async def test_semantically_rejected_checkpoints_do_not_count_as_completed(boundary, monkeypatch):
+    def reject(*args):
+        raise ValidationError("Synthetic invalid citation")
+    monkeypatch.setattr(importer, "validate_batches", reject)
+    events = []
+    await execute(boundary, progress=events.append)
+    assert events[-1].phase == "Import review_required" and events[-1].completed == 0

@@ -25,6 +25,12 @@ Use namespaced `skill_id` (e.g. `cs2023:AL.unit_topic`, `python.conditionals`) a
 
 ## CS2023 ingestion strategy
 
+The operator bridge emits optional internal `ImportProgress` observations for preflight,
+model waits, saved/reused checkpoints, unit validation/commit and final outcome. These are
+display-only and do not alter persistence, model request identity or academic approval.
+The CLI renders a heartbeat bar on stderr and can monitor an already-active run through
+read-only `--watch-run UUID|latest`. See [progress and resume](skill_import_bridge.md).
+
 CS2023 has knowledge areas, knowledge units, topics and learning outcomes. Start with source-licensed **structured extraction** (HTML headings or approved manually prepared excerpts), not a model call across an entire unvalidated report. Check rights: CS2023 is copyrighted and its permissions differ from permissive software licenses. Do not bulk replicate protected text in a commercial model pipeline without clearance. Keep only source metadata and minimally necessary derived text where appropriate.
 
 1. **Acquire** approved official source/sections and create immutable `curriculum_sources` record: URL, edition, checksum, ingestion date, rights status.

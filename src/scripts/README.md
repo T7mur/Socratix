@@ -13,6 +13,9 @@ Import and seed tools must preserve human approval and immutable versions. Never
 
 For the merged PDF → gateway → pending review workflow, see [bridge runbook](../../docs/skill_import_bridge.md).
 `import_skills.py` supports validated artifact import, dry-run, resume and report regeneration.
+It now displays chunk/unit progress on stderr (`--no-progress` disables it). To monitor an
+existing run without restarting or making provider calls, use `--watch-run latest` or a run
+UUID with the existing `--actor-id` and `--target` options. See the bridge runbook.
 `check_services.py` and `check_registration.py` make read-only credential-safe checks.
 `serve_backend.py` configures the Windows-compatible event loop before starting the local API.
 

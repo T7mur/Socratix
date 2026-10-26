@@ -26,6 +26,19 @@ and persistence in F. Student activity generation jobs cannot represent curricul
 
 ## Backend
 
+Progress additions (implemented draft, A/F review pending):
+
+| Import path / owner | Inputs → outputs | Effects / errors | Tests |
+|---|---|---|---|
+| `app.modules.skill_generation.importer.ImportProgress`, `ProgressCallback` / A | Internal phase/count/unit/chunk/run observation → synchronous optional callback | `import_prepared(..., progress=callback)` emits after durable checkpoints/commits; no new schema, provider call or fingerprint input. Callbacks must not perform domain writes | `test_import_orchestration.py` |
+| `app.db.repositories.skill_imports.SkillImportRepository.latest_run` / F | actor UUID → active/latest run UUID | Async read-only; caller-owned transaction. Most recent queued/running, otherwise latest finished; NotFoundError if absent. `report()` additionally exposes per-chunk `checkpointed`, excluding semantically rejected results | Watcher + disposable repository tests |
+| `src/scripts/_import_progress.ImportProgressDisplay`, `progress_from_report` / F | Internal event or operator report → stderr bar/status | Async display context with cancellable heartbeat; sync update/format functions. No stdout/DB/provider operations. Closed stderr disables display rather than aborting import. Example: `async with ImportProgressDisplay() as display` | `test_import_progress.py` |
+| `src/scripts/import_skills.watch_run` / F | database, admin actor, run UUID or latest, callback → final report/exit code | Async polling every 2 seconds using short read-only transactions. No model calls; cancellation stops only polling. Permission/not-found/SQL errors propagate to safe CLI handling | `test_import_progress.py` |
+
+Reuse decision: the watcher uses the existing private ledger/report/admin checks rather than
+creating a second job tracker or touching the active process. The display uses the standard
+library, preserving JSON stdout and leaving generated API contracts unchanged.
+
 Python imports start with `app`, not `src`. All async repository methods use a caller-supplied `AsyncSession`; none commits. Default errors are `ConflictError` (409), `ForbiddenError` (403), `NotFoundError` (404), `ValidationError` (422). SQL/provider failures are translated at the HTTP boundary without raw exception details.
 
 | Module / functions | Inputs → outputs | Behaviour / errors | Tests |

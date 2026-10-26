@@ -72,6 +72,16 @@ ignored `outputs/`. Authoritative import records/reports require reviewed 0006 d
 
 ## Remaining external gates
 
+Progress follow-up — 2026-10-26, branch `jk/skill_import_progress`: default stderr progress now
+shows checkpoint counts, current unit/chunk, model-wait phase and elapsed time, with an async
+heartbeat. `--watch-run UUID|latest` polls an existing run read-only; Ctrl+C stops only the
+watcher. `--no-progress` preserves quiet operation; final JSON remains stdout. No migration,
+public API or fingerprint changes. Verification: 140 backend tests passed, 18 skipped; lint,
+documentation links and diff whitespace checks passed. A three-second read-only watcher smoke
+check against the active AI-ML run showed 32/49 checkpoints and chunk 33 in progress; it was
+then cancelled without stopping the original importer. This does not establish that the full
+import or academic review completed. Earlier baseline results above remain historical.
+
 1. Member F/A review the draft schema/contract, validate migration and persistence on an explicit
    disposable target, then authorise development deployment/grants. Temporary PostgreSQL startup
    was declined; no substitute hosted destructive test was attempted.
