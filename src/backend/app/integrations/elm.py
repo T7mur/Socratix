@@ -69,6 +69,7 @@ class ELMGateway:
         if not self.settings.elm_base_url or not key or not key.get_secret_value().strip() or not model:
             raise LLMConfigurationError("Set ELM_BASE_URL, ELM_API_KEY and an ELM model")
         if self._client is None:
+            print(key.get_secret_value(), self.settings.elm_base_url, model)
             self._client = AsyncOpenAI(
                 api_key=key.get_secret_value(), base_url=self.settings.elm_base_url,
                 max_retries=0,
@@ -136,6 +137,7 @@ class ELMGateway:
             try:
                 response = await client.chat.completions.create(model=model, messages=messages, stream=False)
             except (APIConnectionError, APIStatusError) as exc:
+                print(exc, 'error')
                 retry = isinstance(exc, APIConnectionError) or exc.status_code in {408, 429} or exc.status_code >= 500
                 if not retry or attempt + 1 == self.settings.elm_max_attempts:
                     status = exc.status_code if isinstance(exc, APIStatusError) else None
