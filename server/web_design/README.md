@@ -13,7 +13,7 @@ A clickable, static design prototype for the student workspace and the instructo
 |---|---|---|
 | Sign in | `#/login` | `/login` |
 | Today (planning cards) | `#/` | `/` |
-| Evening check-in (sheet over Today) | `#/?checkin=1` | `/?checkin=1` |
+| Reflection (replaces the evening check-in; `#/?checkin=1` redirects here) | `#/reflection` | `/reflection` |
 | Plan landing | `#/plan` | `/plan` |
 | Setup | `#/plan/setup` | `/plan/setup` |
 | Backward planning | `#/plan/milestones` | `/plan/milestones` |
@@ -26,8 +26,9 @@ A clickable, static design prototype for the student workspace and the instructo
 | Quick challenge | `#/practice/challenge/list-product` | `/practice/challenge/:itemId` |
 | Mixed challenge | `#/practice/mixed/mx-1` | `/practice/mixed/:setId` |
 | Upload status | `#/practice/uploads/up-1` | `/practice/uploads/:uploadId` |
-| Project | `#/projects/cafe-terminal` | `/projects/[projectId]` |
-| Reflection | `#/reflection` | `/reflection` |
+| Projects | `#/project` | `/project` |
+| New project plan (3 steps) | `#/project/new` | `/project/new` |
+| Accepted project | `#/project/pj-cafe` | `/project/:id` |
 | Review queue (instructor) | `#/review` | `/review` |
 | Settings & privacy | `#/settings` | `/settings` |
 
@@ -37,6 +38,9 @@ A clickable, static design prototype for the student workspace and the instructo
 - `styles.css`: design tokens and components (dark canvas, thin off-white outlines, stage/state colours)
 - `data.js`: sample data shaped with `shared_contracts.md` v1.0 field names (`SelectorResult`, `TaskSpec`, `ProjectSpec`, `HintResponse`, `SkillEstimate`, …)
 - `app.js`: hash router, screens, and simulated interactions (jobs, confirmations, review decisions)
+- `tutorial.js`: welcome on first sign-in, the ? help menu and the 12-step tour (driver.js 1.3.1, pinned)
+- `project.js`: project list, Idea → Questions → Plan wizard (J1/J2 mocked; dates placed by rules) and the accepted plan page
+- `reflection.js`: today's tasks, per-task review, follow-up question (R1 mocked) and the no-hints independence check, plus a Knowledge Gap mock
 - `planning.js`: Today, Plan, Setup, Milestones, the 4-step wizard, evening check-in, Progress and the planning parts of Settings. A simulated server applies the planning rules (planning_execution_plan.md §7) and mocks the ELM calls E1–E5
 - `practice.js`: the Practice area (exercises). A simulated server owns the hint rules and checking, so the screens behave like the spec; solutions and hidden values never sit in `data.js`
 
@@ -56,6 +60,23 @@ Each item was checked against the spec text and exercised in a headless Chrome p
 | 7 | E2E: plan → exercise → run → hint → revise → wrap-up | Plan (Path 2) → suggested practice task → *Practise* → solve → wrap-up → the plan task is ticked automatically |
 | 8 | Project milestones + late change request, no forced architecture | Project: M1–M6 DAG with dependencies, M6 change request, "Your design, not ours", only the CLI protocol is fixed |
 
+### Tutorial, Project, Reflection: demo_features_spec.md §4 checklist
+
+`demo_features_spec.md` v1 wins where it changes earlier files: C1 nav order (Today · Plan · Practice · Reflection · Progress · Skills · Project), C2 phone bottom bar (Today · Plan · Practice · Reflect · More), C3 the evening check-in moved into Reflection, C4 suggestions from the independence check on both paths, C5 email + password (no recovery code), C6 the tool drafts project plans. Checked with Playwright at 360 and 1280 px, light and dark: 59 checks, no console errors, no horizontal overflow.
+
+| Requirement | Where in the prototype |
+|---|---|
+| Welcome on first sign-in; tour runs 12 steps across pages; "Not now" never shows it again; **?** replays it | First app open (or first sign-in) shows Welcome; the ? button left of the theme toggle → *Take the full tour*. The "seen" flag is a stand-in for `students.tutorial_seen_at` |
+| "Explain this page" on `/reflection` shows steps 7–8 only | ? → *Explain this page* |
+| Project: idea → 3–5 questions → 7-section plan; dates respect the 2-day buffer; **Accept** shows milestones in Plan → Due this week | `#/project` → *Start a project plan*; dates are computed backward from the deadline over free time at the chosen hours per week, with the cramming rule from Planning |
+| J1/J2 down → generic questions / empty template; nothing blocks | *Prototype only → ELM down* |
+| Reflection: tasks with status; Save gated on required chips; Save closes the plan and updates "N of 5" | `#/reflection` after submitting today's plan |
+| Independence check: 3–5 bank items, no hints; self-rating vs result; `Not yet` → suggestion in tomorrow's Step 2 on Path 1 and 2 | *Start check* → results → *Add to tomorrow* → *Simulate next day* → Plan Step 2 "Suggested from last night's check" |
+| Knowledge Gap receives `activity_type: "independence_check"` | *Prototype only: events sent to Knowledge Gap* on `#/reflection`; Practice's schedule updates |
+| 360 px and 1280 px, light and dark | Phone uses the bottom bar and a bottom-sheet tour card; reduced motion turns tour animation off |
+
+Tour animations (kept simple): the spotlight glides between targets, the card fades and rises, a thin progress bar fills to N/12, the target pulses once, the phone card slides up, and the welcome check mark draws in. Not done: axe audit (no axe in this setup), the Contact/feedback menu item (no team address yet).
+
 ### Planning: planning_ui.md §20 acceptance checklist
 
 Screens follow `planning_ui.md` v2; rules follow `planning_execution_plan.md` §7 (`planning_spec.md` v5 wasn't available). The Welcome screen (§3, nickname + recovery code) is deferred to the sign-in work on `/login`. Checked with Playwright at 360 px and 1280 px, light and dark: 81 checks, no console errors, no horizontal overflow, none of the banned words (*fail, wrong, weak, bad, demoted*) on screen.
@@ -69,7 +90,7 @@ Screens follow `planning_ui.md` v2; rules follow `planning_execution_plan.md` §
 | Worked example only on the weakest task, Path 1 only | One WORKED EXAMPLE box on "Revise lecture 5"; none on Path 2 |
 | ELM down → every task "Couldn't check", Submit still works | *Prototype only → ELM down*: every card offers Accept / Edit; Submit saves the plan |
 | Move only before the planned time; Off day excludes the plan | *Move* disappears once the clock passes a task; *Off day* → notice + *Undo*, and the check-in says "Off day: this plan is not counted." |
-| Evening chips: no default; **All as planned** fills; Save disabled until all set | Evening sheet |
+| Evening chips: no default; **All as planned** fills; Save disabled until all set | Now in Reflection (C3) |
 | 5th qualifying plan unlocks; next day starts at Step 2 | The seeded student has 3 of 5 on target; an on-target check-in shows the unlock message; *Simulate next day* → Plan opens at Step 2 ("Competent path") |
 | No secret in the bundle | `server/web_design/` holds sample data only |
 | Keyboard-only flow | Every control is a real button/input; tested Step 1 → 2 → 3 with the keyboard |

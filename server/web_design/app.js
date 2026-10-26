@@ -9,8 +9,7 @@
     role: "student",
     navOpen: false,
     skills: { view: "graph", selected: "python.conditionals", challenged: false },
-    project: { tab: "design", milestone: "M3", hintsUsed: 1 },
-    reflection: { step: "write", confidence: 40, difficulty: "hard", evidence: true, tags: new Set(["python.conditionals"]) },
+    moreOpen: false,
     review: { filter: "all", selected: "rv-1", decisions: {} },
     settings: { evidence: true, research: false },
     theme: (() => { try { return localStorage.getItem("socratix-theme") === "light" ? "light" : "dark"; } catch { return "dark"; } })(),
@@ -53,10 +52,10 @@
     { id: "today", label: "Today", icon: "house", href: "#/" },
     { id: "plan", label: "Plan", icon: "calendar-range", href: "#/plan" },
     { id: "practice", label: "Practice", icon: "book-open-check", href: "#/practice" },
+    { id: "reflection", label: "Reflection", icon: "notebook-pen", href: "#/reflection" },
     { id: "progress", label: "Progress", icon: "chart-column", href: "#/progress" },
     { id: "skills", label: "Skills", icon: "network", href: "#/skills" },
-    { id: "projects", label: "Project", icon: "folder-kanban", href: "#/projects/cafe-terminal" },
-    { id: "reflection", label: "Reflection", icon: "notebook-pen", href: "#/reflection" },
+    { id: "project", label: "Project", icon: "folder-kanban", href: "#/project" },
   ];
 
   const ROUTES = {
@@ -65,13 +64,13 @@
     progress: { title: "Progress", render: () => PL.progress() },
     skills: { title: "Skills", render: pageSkills },
     practice: { title: "Practice", render: () => PR.render(hashParts()) },
-    projects: { title: "Campus Café Terminal", parent: "Project", render: pageProject },
-    reflection: { title: "Reflection", render: pageReflection },
+    project: { title: "Project", render: () => PJ.render(hashParts()) },
+    reflection: { title: "Reflection", render: () => RF.render() },
     review: { title: "Review queue", parent: "Instructor", render: pageReview },
     settings: { title: "Settings", render: pageSettings },
   };
 
-  let PR, PL; // Practice (practice.js) and Planning (planning.js) modules, created once the helpers below exist
+  let PR, PL, PJ, RF, TU; // Practice, Planning, Project, Reflection and Tutorial modules, created once the helpers below exist
   function hashParts() {
     const [path, qs] = location.hash.replace(/^#\/?/, "").split("?");
     return { path: path.split("/").filter(Boolean).slice(1), query: Object.fromEntries(new URLSearchParams(qs || "")) };
@@ -81,6 +80,8 @@
     const seg = (location.hash.replace(/^#\/?/, "").split("?")[0].split("/")[0] || "today");
     if (seg === "dashboard") return "today";
     if (seg === "learn") { location.replace("#/practice/list-total"); return "practice"; }
+    if (seg === "projects") { location.replace("#/project"); return "project"; }
+    if (seg === "today" && /checkin=1/.test(location.hash)) { location.replace("#/reflection"); return "reflection"; } // C3: the check-in lives in Reflection
     if (seg === "login") return "login";
     return ROUTES[seg] ? seg : "today";
   }
@@ -91,7 +92,7 @@
     if (id === "login") {
       app.innerHTML = pageLogin();
     } else {
-      const r = id === "practice" ? { ...ROUTES.practice, ...PR.meta(hashParts()) } : id === "plan" ? { ...ROUTES.plan, ...PL.meta(hashParts()) } : ROUTES[id];
+      const r = id === "practice" ? { ...ROUTES.practice, ...PR.meta(hashParts()) } : id === "plan" ? { ...ROUTES.plan, ...PL.meta(hashParts()) } : id === "project" ? { ...ROUTES.project, ...PJ.meta(hashParts()) } : ROUTES[id];
       app.innerHTML = shell(id, r, r.render(), quiet);
     }
     bind(id);
@@ -103,7 +104,20 @@
     }
   }
 
-  window.addEventListener("hashchange", () => { routeGen++; state.navOpen = false; render(true); });
+  window.addEventListener("hashchange", () => { routeGen++; state.navOpen = false; state.moreOpen = false; render(true); });
+
+  // ---------- phone bottom bar (C2): Today · Plan · Practice · Reflect · More ----------
+  function bottomBar(id) {
+    const more = [["progress", "Progress", "chart-column", "#/progress"], ["skills", "Skills", "network", "#/skills"], ["project", "Project", "folder-kanban", "#/project"], ["settings", "Settings", "settings", "#/settings"]];
+    if (state.role === "instructor") more.push(["review", "Review queue", "shield-check", "#/review"]);
+    const inMore = more.some(([k]) => k === id);
+    const a = (k, l, ic, h) => `<a href="${h}" ${k === id ? 'aria-current="page"' : ""}>${icon(ic)}<span>${l}</span></a>`;
+    return `<nav class="bottombar" aria-label="Main (phone)">
+      ${a("today", "Today", "house", "#/")}${a("plan", "Plan", "calendar-range", "#/plan")}${a("practice", "Practice", "book-open-check", "#/practice")}${a("reflection", "Reflect", "notebook-pen", "#/reflection")}
+      <button type="button" data-act="more" aria-expanded="${state.moreOpen}" aria-controls="more-sheet" ${inMore ? 'aria-current="page"' : ""}>${icon("ellipsis")}<span>More</span></button>
+    </nav>
+    <div class="more-sheet ${state.moreOpen ? "open" : ""}" id="more-sheet" ${state.moreOpen ? "" : "hidden"}><div class="more-inner" role="menu" aria-label="More">${more.map(([k, l, ic, h]) => `<a role="menuitem" href="${h}" ${k === id ? 'aria-current="page"' : ""}>${icon(ic)}<span>${l}</span></a>`).join("")}</div></div>`;
+  }
 
   // ---------- shell ----------
   function shell(id, r, body, quiet) {
@@ -143,10 +157,12 @@
           <div class="crumbs">${r.parent ? `<span class="hide-sm">${r.parent}</span>${icon("chevron-right", 'class="hide-sm"')}` : ""}<b>${r.title}</b></div>
           <span class="spacer"></span>
           <span class="sample-pill" title="All names, numbers and activity on these screens are synthetic.">${icon("flask-conical")}<span>Sample data<span class="long"> · design prototype</span></span></span>
+          ${TU.helpButton()}
           ${themeToggle()}
         </header>
         <main id="content" class="page ${quiet ? "" : "fade-in"}">${body}</main>
       </div>
+      ${bottomBar(id)}
     </div>`;
   }
 
@@ -250,7 +266,7 @@
       </div>
     </div>
     <div class="skills-layout">
-      <section class="panel" aria-label="${v === "graph" ? "Skill graph" : "Skill list"}">
+      <section class="panel" aria-label="${v === "graph" ? "Skill graph" : "Skill list"}" data-tour="skills-map">
         <div class="panel-body" style="padding-top:20px">
           ${v === "graph" ? `<div class="graph-wrap">${graphSvg()}</div>
           <div class="legend" style="margin-top:14px">
@@ -274,183 +290,11 @@
         </div>
       </section>
       ${skillDetail()}
-    </div>`;
-  }
-
-  // ---------- code editor (project) ----------
-  function editor(code, file, meta) {
-    const lines = code.split("\n").length;
-    return `
-    <div class="editor-bar">${icon("file-code")}<span class="file">${file}</span><span class="spacer" style="flex:1"></span>${meta}</div>
-    <div class="code-area">
-      <div class="gutter" aria-hidden="true">${Array.from({ length: lines }, (_, i) => `<span>${i + 1}</span>`).join("")}</div>
-      <div class="code-stack">
-        <pre aria-hidden="true"><code data-hl>${hlPy(code)}\n</code></pre>
-        <textarea data-code spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off" aria-label="Code editor, ${file}">${esc(code)}</textarea>
-      </div>
-    </div>`;
-  }
-
-  // ---------- project ----------
-  function designCanvas() {
-    const box = (x, y, w, t, s) => `<g class="dc-box"><rect x="${x}" y="${y}" width="${w}" height="52" rx="6"/><text x="${x + 12}" y="${y + 22}">${t}</text><text class="s" x="${x + 12}" y="${y + 39}">${s}</text></g>`;
-    return `
-    <div class="design-canvas"><svg viewBox="0 0 640 320" role="img" aria-label="Your design: main loop calls show_menu, read_choice, add_to_cart and checkout; cart is two parallel lists">
-      <defs><marker id="dc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" style="stroke:var(--warn)" stroke-width="1.4"/></marker></defs>
-      <path class="dc-wire" d="M150 60 C 200 60, 200 40, 250 40"/><path class="dc-wire" d="M150 60 C 200 60, 200 120, 250 120"/>
-      <path class="dc-wire" d="M150 60 C 200 60, 200 200, 250 200"/><path class="dc-wire" d="M150 60 C 200 60, 200 280, 250 280"/>
-      <path class="dc-wire" d="M420 200 L 470 200"/><path class="dc-wire" d="M420 280 C 445 280, 445 220, 470 220"/>
-      ${box(20, 34, 130, "main loop", "while not done")}
-      ${box(250, 14, 170, "show_menu()", "PR1")}
-      ${box(250, 94, 170, "read_choice(text)", "PR3, PR4 · M3")}
-      ${box(250, 174, 170, "add_to_cart(i, qty)", "PR5 · M4")}
-      ${box(250, 254, 170, "checkout()", "M5")}
-      ${box(470, 184, 150, "cart", "items[], qtys[]")}
-      <path class="dc-wire" d="M462 106 H 428" style="stroke:var(--warn)" marker-end="url(#dc-arrow)"/><g class="dc-note"><text x="468" y="110">validate before int()?</text></g>
-    </svg></div>`;
-  }
-
-  function pageProject() {
-    const P = D.project, S = state.project;
-    const ms = P.milestones.find((m) => m.milestone_id === S.milestone);
-    const reqs = P.requirements.filter((r) => r.milestone === S.milestone);
-    const tab = S.tab;
-    return `
-    <div class="page-head">
-      <div>
-        <h1>${P.title}</h1>
-        <div class="row" style="margin-top:8px"><span class="badge b-neutral plain">Project</span><span class="badge b-pass">verified</span><span class="small faint">v${P.project_version} · M3 of 6</span></div>
-      </div>
-      <div class="page-actions"><button class="btn" type="button" data-toast="Milestone attempt submitted (JobRef queued).">${icon("send")}Submit M3</button></div>
     </div>
-
-    <div class="work3">
-      <section class="panel" aria-labelledby="brief-h">
-        <div class="panel-head"><h2 id="brief-h">Brief</h2></div>
-        <div class="panel-body stack-sm" style="gap:16px">
-          <p>${esc(P.student_brief)}</p>
-          <div class="stack-sm" style="gap:8px"><span class="small faint">Practises</span><div class="row">${P.target_skill_ids.map((s) => chip(s)).join("")}</div></div>
-          <dl class="kv">
-            <dt>Not allowed</dt><dd class="small muted">${P.excluded.join(", ")}</dd>
-            <dt>Engineering</dt><dd class="small">requirements, testing</dd>
-          </dl>
-          <div>
-            <h3 style="margin-bottom:10px">Milestones</h3>
-            <div class="milestones">
-              ${P.milestones.map((m) => `
-              <div class="ms ${m.status} ${m.change_request ? "cr" : ""}">
-                <span class="ms-node" aria-hidden="true">${m.status === "done" ? icon("check") : m.status === "locked" ? icon("lock") : m.milestone_id}</span>
-                <button type="button" data-ms="${m.milestone_id}" aria-current="${m.milestone_id === S.milestone ? "step" : "false"}" ${m.status === "locked" ? 'aria-disabled="true"' : ""}>
-                  <span class="t">${m.milestone_id} · ${m.title}</span>
-                  <span class="d">${m.status === "done" ? "Complete · " : m.status === "locked" ? `After ${m.depends_on.join(", ")} · ` : "In progress · "}${m.assessment_method}${m.review ? " · rubric reviewed" : ""}</span>
-                </button>
-              </div>`).join("")}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="pw-h">
-        <div class="panel-head" style="padding-bottom:0"><h2 id="pw-h" class="sr-only">Workspace</h2>
-          <div class="tabs" role="tablist" aria-label="Workspace" style="flex:1">
-            ${[["design", "Design", "workflow"], ["code", "Code", "code-xml"], ["tests", "Tests", "flask-conical"]].map(([k, l, ic]) => `<button role="tab" type="button" data-tab="${k}" aria-selected="${tab === k}">${icon(ic)}${l}</button>`).join("")}
-          </div>
-        </div>
-        <div class="panel-body stack-sm" style="gap:14px;padding-top:16px" role="tabpanel">
-          ${tab === "design" ? `
-            <div class="note">${icon("info")}<div><b style="color:var(--ink);font-weight:500">Your design, not ours.</b> M1 asked you to propose components and explain trade-offs. Only the command-line protocol below is fixed, because grading needs it.</div></div>
-            ${designCanvas()}
-            <div><h3 style="margin-bottom:6px">Command-line protocol (fixed for grading)</h3><div class="sig">${esc(P.cli_protocol)}</div></div>`
-          : tab === "code" ? `<div class="editor">${editor(D.projectCode, "cafe.py", `<span class="tiny">M3 draft</span>`)}</div>`
-          : `
-            <div class="row"><b class="small">Last run · M3</b><span class="badge b-fail">2 / 4 passed</span><span class="badge b-neutral plain">grading valid</span></div>
-            <div class="stack-sm" style="gap:6px">
-              <div class="test-row"><span class="bad">${icon("x")}</span><span>T1</span><span class="faint">PR3</span><span>input "abc" → program crashed (ValueError)</span></div>
-              <div class="test-row"><span class="ok">${icon("check")}</span><span>T2</span><span class="faint">PR3</span><span class="faint">out-of-range item rejected</span></div>
-              <div class="test-row"><span class="bad">${icon("x")}</span><span>T3</span><span class="faint">PR4</span><span>"2 x0" → cart changed, expected unchanged</span></div>
-              <div class="test-row"><span class="ok">${icon("check")}</span><span>T4</span><span class="faint">PR3</span><span class="faint">valid selection accepted</span></div>
-            </div>
-            <p class="tiny faint">M2 tests still run on every M3 submission so a change can't silently break earlier behaviour.</p>`}
-        </div>
-      </section>
-
-      <aside class="stack tutor-col" style="gap:16px">
-        <section class="panel" aria-labelledby="msr-h">
-          <div class="panel-head"><h2 id="msr-h">${ms.milestone_id} · ${ms.title}</h2></div>
-          <div class="panel-body stack-sm">
-            <p class="small muted">${ms.detail}</p>
-            ${reqs.length ? reqs.map((r) => `<div class="req"><span class="rid">${r.requirement_id}</span><span>${esc(r.description)}</span><span></span></div>`).join("") : `<p class="small faint">${ms.status === "locked" ? `Unlocks after ${ms.depends_on.join(", ")}.` : "Requirements were assessed by rubric."}</p>`}
-            ${ms.change_request ? `<div class="note warn">${icon("git-pull-request-arrow")}<div>A change request arrives after M5. Your earlier behaviour must keep passing.</div></div>` : ""}
-          </div>
-        </section>
-        <section class="panel" aria-labelledby="ph-h">
-          <div class="panel-head"><h2 id="ph-h">Hints for M3</h2><span class="sub">${S.hintsUsed} of 4 used</span></div>
-          <div class="panel-body">
-            <div class="ladder">
-              <div class="rung used"><span class="rung-node" aria-hidden="true">1</span><div class="rung-body"><div class="rung-title">Where is the error?</div><div class="hint-bubble">Test T1 sends <code>abc</code>. Which line runs on that text before any range check happens?</div></div></div>
-              <div class="rung ${S.hintsUsed >= 2 ? "used" : "next"}"><span class="rung-node" aria-hidden="true">2</span><div class="rung-body"><div class="rung-title">What should this code do?</div>${S.hintsUsed >= 2 ? `<div class="hint-bubble">PR3 says malformed selections are rejected and asked again. What should <code>read_choice</code> return for text that isn't a number?</div>` : `<div><button class="btn btn-sm" type="button" data-act="phint">${icon("lightbulb")}Ask for a level 2 hint</button></div>`}</div></div>
-              <div class="rung ${S.hintsUsed >= 2 ? "next" : ""}"><span class="rung-node" aria-hidden="true">3</span><div class="rung-body"><div class="rung-title">What if you changed it?</div><span class="tiny faint">${S.hintsUsed >= 2 ? "Available next" : "Locked until level 2"}</span></div></div>
-              <div class="rung reveal"><span class="rung-node" aria-hidden="true">4</span><div class="rung-body"><div class="rung-title">Answer + explanation</div><span class="tiny faint">Asks for confirmation first</span></div></div>
-            </div>
-          </div>
-        </section>
-      </aside>
-    </div>`;
-  }
-
-  // ---------- reflection ----------
-  function pageReflection() {
-    const R = state.reflection;
-    const proposal = [
-      { skill_id: "python.conditionals", confidence_label: "medium", reason: "You mention the 3 vs 4 boundary" },
-      { skill_id: "python.comparisons", confidence_label: "low", reason: "“< vs <=” is a comparison operator choice" },
-    ];
-    return `
-    <div class="page-head">
-      <div><h1>Reflection</h1><p>A few honest sentences about the attempt. Reflections are private to you and count only as a light signal, never as proof of what you know.</p></div>
-      <span class="badge b-neutral plain">${icon("lock")} Private</span>
-    </div>
-    <div class="two">
-      <section class="panel" aria-labelledby="rf-h">
-        <div class="panel-head"><h2 id="rf-h">Stock classifier · latest attempt</h2><span class="sub">Assisted · hint level 2</span></div>
-        <div class="panel-body stack-sm" style="gap:16px">
-          <div class="field"><label for="r1">What changed in how you think about it?</label><textarea class="textarea" id="r1" rows="3">I assumed "less than 3" included 3. Writing out 2, 3 and 4 made the boundary obvious.</textarea></div>
-          <div class="field"><label for="r2">What was hard?</label><textarea class="textarea" id="r2" rows="2">Reading "1–3" and turning it into a condition.</textarea></div>
-          <div class="field"><label for="r3">What will you revisit?</label><textarea class="textarea" id="r3" rows="2" placeholder="Optional"></textarea></div>
-          <div class="field">
-            <label for="conf-r">How confident are you now? <span class="mono faint" id="conf-v">${R.confidence}%</span></label>
-            <input type="range" id="conf-r" min="0" max="100" step="10" value="${R.confidence}" aria-describedby="conf-h">
-            <span class="hint-text" id="conf-h">Self-reported. It helps pick what to practise; it never raises your skill indices.</span>
-          </div>
-          <div class="field"><span class="label" id="dif">How hard did it feel?</span>
-            <div class="seg" role="group" aria-labelledby="dif">${["easy", "ok", "hard"].map((d) => `<button type="button" data-diff="${d}" aria-pressed="${R.difficulty === d}">${d[0].toUpperCase() + d.slice(1)}</button>`).join("")}</div>
-          </div>
-        </div>
-        <div class="panel-foot"><button class="btn btn-primary" type="button" data-act="reflect" ${R.step !== "write" ? "disabled" : ""}>${icon("wand-sparkles")}Suggest related skills</button><span class="tiny faint">Nothing is saved as evidence until you confirm.</span></div>
-      </section>
-
-      <div class="stack">
-        <section class="panel" aria-labelledby="rt-h" aria-live="polite">
-          <div class="panel-head"><h2 id="rt-h">Related skills</h2></div>
-          <div class="panel-body">
-            ${R.step === "write" ? `<div class="empty" style="padding:32px 12px">${icon("notebook-pen")}<p class="small">After you write, Socratix suggests which skills your reflection is about and may ask one or two questions. You choose what to keep.</p></div>`
-            : R.step === "proposed" ? `
-              ${proposal.map((t) => `<div class="tag-row"><label class="check"><input type="checkbox" data-rtag="${t.skill_id}" ${R.tags.has(t.skill_id) ? "checked" : ""} aria-label="Keep ${t.skill_id}"></label><div><div class="row">${chip(t.skill_id)}</div><div class="why">${esc(t.reason)}</div></div>${conf(t.confidence_label)}</div>`).join("")}
-              <div class="field" style="margin-top:12px"><label for="q1">Which result did you expect for 3 before the hint?</label><input class="input" id="q1" placeholder="Optional answer"></div>
-              <label class="check small" style="margin-top:14px"><input type="checkbox" data-act="evtoggle" ${R.evidence ? "checked" : ""}> Use this reflection as self-report evidence (low weight, kept separate from graded results)</label>
-              <div class="row" style="margin-top:14px"><button class="btn btn-primary" type="button" data-act="confirm-reflection">${icon("check")}Confirm ${R.tags.size} tag${R.tags.size === 1 ? "" : "s"}</button><button class="btn btn-ghost" type="button" data-act="dismiss-reflection">Dismiss all</button></div>`
-            : `<div class="note pass">${icon("circle-check")}<div><b>Reflection saved.</b> ${R.evidence && R.tags.size ? `${R.tags.size} self-report event${R.tags.size === 1 ? "" : "s"} recorded at 14:06 for ${[...R.tags].join(", ")}.` : "Kept as a private note only; no evidence recorded."}</div></div>`}
-          </div>
-        </section>
-        <section class="panel" aria-labelledby="past-h">
-          <div class="panel-head"><h2 id="past-h">Earlier reflections</h2></div>
-          <div class="panel-body">
-            <div class="due"><span class="due-dot later" aria-hidden="true"></span><div><div class="small">“I couldn't explain why my loop stopped.”</div><div class="tiny faint">Thu 23 Oct · Loop recall check · confirmed python.loops</div></div><span class="tiny faint">Private</span></div>
-            <div class="due"><span class="due-dot later" aria-hidden="true"></span><div><div class="small">“Predicting output was easier when I traced on paper.”</div><div class="tiny faint">Wed 22 Oct · Comparisons · no tags kept</div></div><span class="tiny faint">Private</span></div>
-          </div>
-        </section>
-      </div>
-    </div>`;
+    ${(() => { const R = D.reflection, tr = R.depthTrend.slice(-5), avg = Math.round(tr.reduce((a, b) => a + b, 0) / tr.length), c = R.calibration; const L = ["", "Describes", "Explains", "Plans"];
+      return `<section class="panel reflect-skill" aria-labelledby="rs-h" style="margin-top:20px"><div class="panel-head"><h2 id="rs-h">Reflection</h2><span class="sub">a skill too · ${icon("lock")} only you see this</span></div>
+        <div class="panel-body"><dl class="kv"><dt>Depth</dt><dd>Usually <b>${L[avg]}</b> (level ${avg} of 3) over your last ${tr.length} reflections</dd><dt>Self-assessment</dt><dd>${c.matched} of ${c.total} concepts rated in line with the check (last 14 days)</dd></dl>
+        <p class="tiny faint" style="margin-top:8px">Levels: 1 describes what happened · 2 names a cause · 3 adds a next step. <a href="#/progress">See the trend</a></p></div></section>`; })()}`;
   }
 
   // ---------- review ----------
@@ -601,7 +445,12 @@
 
     const on = (sel, fn, ev = "click") => app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, (e) => fn(el, e)));
 
+    TU.bindHelp(app);
+    const mb = app.querySelector('[data-act="more"]');
+    if (mb) mb.addEventListener("click", () => { state.moreOpen = !state.moreOpen; const sh = app.querySelector("#more-sheet"); sh.hidden = !state.moreOpen; sh.classList.toggle("open", state.moreOpen); mb.setAttribute("aria-expanded", String(state.moreOpen)); if (state.moreOpen) sh.querySelector("a").focus(); });
     if (id === "practice") PR.bind(app, hashParts());
+    if (id === "project") { PJ.bind(app, hashParts()); PL.bind(app, id, hashParts()); }       // PL: shared "Prototype only" controls
+    if (id === "reflection") { RF.bind(app); PL.bind(app, id, hashParts()); }
     if (id === "today" || id === "plan" || id === "progress" || id === "settings") PL.bind(app, id, hashParts());
 
     if (id === "skills") {
@@ -610,23 +459,6 @@
       on("[data-skill]", pick);
       on(".gnode", (g, e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(g); } }, "keydown");
       on('[data-act="challenge"]', () => { state.skills.challenged = true; render(); toast("Reassessment job queued: a new diagnostic in a fresh context."); });
-    }
-
-    if (id === "projects") {
-      on("[data-tab]", (b) => { state.project.tab = b.dataset.tab; render(); });
-      on("[data-ms]", (b) => { if (b.getAttribute("aria-disabled") === "true") { toast(`Locked until ${D.project.milestones.find((m) => m.milestone_id === b.dataset.ms).depends_on.join(", ")} is complete.`); } state.project.milestone = b.dataset.ms; render(); });
-      on('[data-act="phint"]', () => { state.project.hintsUsed = 2; render(); });
-    }
-
-    if (id === "reflection") {
-      const R = state.reflection;
-      on("#conf-r", (r) => { R.confidence = +r.value; app.querySelector("#conf-v").textContent = `${r.value}%`; }, "input");
-      on("[data-diff]", (b) => { R.difficulty = b.dataset.diff; render(); });
-      on('[data-act="reflect"]', async (b) => { const gen = routeGen; b.classList.add("is-loading"); await sleep(900); R.step = "proposed"; if (stillOn(gen)) render(); });
-      on("[data-rtag]", (c) => { c.checked ? R.tags.add(c.dataset.rtag) : R.tags.delete(c.dataset.rtag); render(); }, "change");
-      on('[data-act="evtoggle"]', (c) => { R.evidence = c.checked; }, "change");
-      on('[data-act="confirm-reflection"]', () => { R.step = "saved"; render(); });
-      on('[data-act="dismiss-reflection"]', () => { R.tags.clear(); R.step = "saved"; render(); });
     }
 
     if (id === "review") {
@@ -647,7 +479,7 @@
 
     if (id === "login") {
       on("[data-lrole]", (b) => { state.role = b.dataset.lrole; render(); });
-      on("[data-login]", (f, e) => { e.preventDefault(); location.hash = state.role === "instructor" ? "#/review" : "#/"; }, "submit");
+      on("[data-login]", (f, e) => { e.preventDefault(); location.hash = state.role === "instructor" ? "#/review" : "#/"; setTimeout(() => TU.maybeWelcome(), 400); }, "submit");
     }
   }
 
@@ -663,5 +495,9 @@
   PL = window.PlanningModule(SX);
   SX.planTask = PL.planTask;
   PR = window.PracticeModule(SX);
+  PJ = window.ProjectModule(SX, PL);
+  RF = window.ReflectionModule(SX, PL);
+  TU = window.TutorialModule(SX);
   render();
+  setTimeout(() => TU.maybeWelcome(), 500); // first sign-in: there's no auth gate in the prototype, so the first app open counts
 })();

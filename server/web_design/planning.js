@@ -105,7 +105,7 @@ window.PlanningModule = (SX) => {
         if (big) v = { finishable: "yes", scopeOk: false, issue: "scope_too_big", note: /past paper/i.test(t.text) ? "A full past paper usually takes 2–3 hours. Split it, or plan only part today?" : `This looks bigger than ${t.mins} min. Split it, or plan only part today?` };
         else if (cls !== "pass") v = { finishable: "no", scopeOk: true, issue: "not_finishable", note: `How will you know you are done? Example: "${rewriteOf(t)}"` };
         else v = { finishable: "yes", scopeOk: true, issue: null, note: `Clear finish line, fits the slot.${ms ? ` Linked to milestone "${ms.name} (${WD[wd(ms.date)]})".` : ""}` };
-        verdicts[t.id] = { ...v, type, milestoneId: ms ? ms.id : null, source: "elm" };
+        verdicts[t.id] = { ...v, type, milestoneId: ms ? ms.id : null, concept_ids: conceptsOf(t.text), source: "elm" };
       });
       const words = (ctx.priority || "").toLowerCase().replace(/\bcs\b/g, "inf").split(/\W+/).filter((w) => w.length > 2 && !/^(the|and|for|today|top|my|get|some)$/.test(w));
       const syn = { coursework: ["cw", "lab", "coursework"], inf: ["inf", "inf2", "inf1a"], maths: ["la1", "past paper", "algebra"], revision: ["revise", "past paper"] };
@@ -113,6 +113,7 @@ window.PlanningModule = (SX) => {
       const cov = ctx.allTasks.find(covers);
       return { verdicts, priorityCovered: words.length ? !!cov : null, coveredBy: cov ? cov.id : null };
     }
+    function conceptsOf(text) { return ((D.reflection && D.reflection.conceptOf) || []).filter((c) => new RegExp(c.re, "i").test(text)).map((c) => c.concept); }
     function rewriteOf(t) {
       if (/lecture\s*5/i.test(t.text)) return "Revise lecture 5: redo the 3 worked examples, 45 min";
       return `${t.text.replace(/[.\s]+$/, "")}: finish one named part, ${t.mins} min`;
@@ -122,6 +123,7 @@ window.PlanningModule = (SX) => {
       const cls = classify(t.text);
       return cls === "pass" ? { finishable: "yes", scopeOk: true, issue: null, note: "Has a clear finish line.", type: typeOf(t.text), source: "rules" }
         : { finishable: "no", scopeOk: true, issue: "not_finishable", note: "Add a finish line or a time, e.g. \"for 45 min\".", type: typeOf(t.text), source: "rules" };
+      // (concept_ids for rules-only verdicts are added by the caller)
     }
 
     // 7.2–7.4 rule points + per-task hints
@@ -252,19 +254,18 @@ window.PlanningModule = (SX) => {
       });
     }
 
-    return { blocksFor, freeMinutes, slots, classify, typeOf, TYPE_NAME, dueSoon, e1, e3, e4, e5, rewriteOf, ruleVerdict, rules, quality, milestoneRules, checkin, tendencies };
+    return { blocksFor, freeMinutes, slots, classify, typeOf, TYPE_NAME, dueSoon, conceptsOf, e1, e3, e4, e5, rewriteOf, ruleVerdict, rules, quality, milestoneRules, checkin, tendencies };
   })();
 
   // ================= client state =================
   const st = {
     now: "09:30",
     sim: { elm: false, waking: false, net: false, push: false, fresh: false },
-    weeklyDismissed: false,
+    weeklyDismissed: false, fromCheck: [],
     setupTab: "fill", preview: null, readMsg: null, editDeadline: null,
     msDeadline: "d1", msEdit: null, msTags: {},
     toastAct: null, suggestion: { skipped: false, editing: false },
-    showRecovery: false, notif: "default",
-    checkin: null,
+    notif: "default",
   };
   const newWizard = (date, withFixture) => ({
     date, step: 1, started: false,
@@ -330,7 +331,7 @@ window.PlanningModule = (SX) => {
     if (st.sim.fresh) return `${waking}${todayHead()}${setupFirst()}${proto()}`;
     const done = W.tasks.filter((t) => t.status === "done").length, next = W.tasks.find((t) => t.status === "planned");
     let primary;
-    if (W.submitted && afterSix() && !W.closed) primary = `<div class="tcard-main"><div><div class="label-up">This evening</div><h2>How did today go?</h2><p class="small muted">${done} of ${W.tasks.length} done. Rate your time in about 10 seconds.</p></div><a class="btn btn-primary" href="#/?checkin=1">${icon("moon-star")}Check in (10 seconds)</a></div>`;
+    if (W.submitted && afterSix() && !W.closed) primary = `<div class="tcard-main"><div><div class="label-up">This evening</div><h2>How did today go?</h2><p class="small muted">${done} of ${W.tasks.length} done. Look back on each task in Reflection.</p></div><a class="btn btn-primary" href="#/reflection">${icon("moon-star")}Check in</a></div>`;
     else if (W.submitted && W.closed) primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Plan closed</h2><p class="small muted">${W.offDay ? "Off day: not counted." : `${done} of ${W.tasks.length} done.`} Tomorrow's plan opens from 18:00.</p></div><a class="btn" href="#/progress">${icon("chart-column")}See progress</a></div>`;
     else if (W.submitted) primary = `<div class="tcard-main"><div><div class="label-up">Next task</div><h2>${next ? esc(next.text) : "All tasks handled"}</h2><p class="small muted mono">${next ? `${next.time} · ${next.mins} min · ` : ""}${done} of ${W.tasks.length} done</p></div><a class="btn btn-primary" href="#/plan/today/4">${icon("list-checks")}Open plan</a></div>`;
     else primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Plan your day</h2><p class="small muted">${competent() ? "Write your tasks and get light feedback. About 2 minutes." : "Four short steps: check-in, tasks, feedback, plan. About 3 minutes."}</p></div><a class="btn btn-primary" href="#/plan/today/${W.started ? W.step : 1}">${icon("pencil-line")}${W.started ? `Continue (step ${W.step})` : "Plan your day"}</a></div>`;
@@ -340,7 +341,7 @@ window.PlanningModule = (SX) => {
       <div class="today-grid">
         <div class="stack" style="gap:16px">
           ${st.sim.push ? `<section class="panel tcard welcome-card"><div class="tcard-main"><div><div class="label-up">Good to see you</div><h2>Your reminder didn't arrive</h2><p class="small muted">No problem. ${W.submitted ? "Your plan is ready below." : "Plan your day here instead."}</p></div><a class="btn btn-primary" href="${W.submitted ? "#/plan/today/4" : "#/plan/today/1"}">${W.submitted ? "Open plan" : "Plan your day"}</a></div></section>` : ""}
-          <section class="panel tcard primary-card" aria-label="Today's plan">${primary}</section>
+          <section class="panel tcard primary-card" aria-label="Today's plan" data-tour="today-card">${primary}</section>
           ${W.submitted ? `<section class="panel" aria-labelledby="cl-h"><div class="panel-head"><h2 id="cl-h">Checklist</h2><span class="sub">${done} of ${W.tasks.length} done</span></div><div class="panel-body checklist compact">${W.tasks.map((t) => checkRow(t, true)).join("")}</div></section>` : ""}
           ${showSug ? `<section class="panel suggest-card" aria-labelledby="sg-h"><div class="panel-body stack-sm">
             <div class="label-up" id="sg-h">Suggested for you</div>
@@ -352,7 +353,6 @@ window.PlanningModule = (SX) => {
         <section class="panel" aria-labelledby="dw-h"><div class="panel-head"><h2 id="dw-h">Due this week</h2><a class="btn btn-ghost btn-sm" href="#/plan/milestones">Milestones</a></div>
           <div class="panel-body">${dueList(W.date)}</div></section>
       </div>
-      ${parts.query.checkin === "1" ? eveningSheet() : ""}
       ${proto()}`;
   }
   function todayHead() {
@@ -383,7 +383,7 @@ window.PlanningModule = (SX) => {
           <div class="panel-body stack-sm">
             <ul class="dl-list">${upcoming.map((d) => `<li><span>${esc(d.course)} · ${esc(d.item)}</span><span class="mono small">${fmtDate(d.date)}</span></li>`).join("")}</ul>
             <a class="btn btn-sm" href="#/plan/milestones">${icon("flag")}${thisWeek} milestone${thisWeek === 1 ? "" : "s"} due this week</a></div></section>
-        <section class="panel" aria-labelledby="pc3"><div class="panel-head"><h2 id="pc3">Setup</h2></div>
+        <section class="panel" aria-labelledby="pc3" data-tour="plan-setup"><div class="panel-head"><h2 id="pc3">Setup</h2></div>
           <div class="panel-body stack-sm"><dl class="kv"><dt>Day window</dt><dd class="mono">${db.setup.window.start}–${db.setup.window.end}</dd><dt>Timetable</dt><dd>${db.setup.classes.length} classes a week</dd><dt>Last updated</dt><dd>${esc(db.setup.updated)}</dd></dl>
             <div><a class="btn btn-sm" href="#/plan/setup">${icon("settings-2")}Update</a></div></div></section>
       </div>${proto()}`;
@@ -501,7 +501,7 @@ window.PlanningModule = (SX) => {
   }
   function wizard(n) {
     if (st.sim.fresh) return `${waking}${head("Plan today")}${setupFirst()}${proto()}`;
-    W.started = true; W.step = n; saveDraft();
+    if (!SX.touring) { W.started = true; W.step = n; saveDraft(); }
     const body = n === 1 ? step1() : n === 2 ? step2() : n === 3 ? step3() : step4();
     return `${waking}${head(W.date === F.today ? "Plan today" : `Plan ${fmtDate(W.date)}`)}${stepper(n)}<div class="wiz" data-step="${n}">${body}</div>${proto()}`;
   }
@@ -537,8 +537,9 @@ window.PlanningModule = (SX) => {
     const R = SERVER.rules(W.tasks, W.date, extraBusy());
     return `${stepLabel(2, "Write your tasks")}
       ${slotStrip()}
+      ${checkSuggestions()}
       <section class="panel"><div class="panel-body stack-sm" style="gap:12px">
-        <div class="table-wrap task-wrap"><table class="task-table"><thead><tr><th>What exactly</th><th>When</th><th>How long</th>${W.showWhere ? "<th>Where</th>" : ""}<th><span class="sr-only">Delete</span></th></tr></thead>
+        <div class="table-wrap task-wrap" data-tour="task-table"><table class="task-table"><thead><tr><th>What exactly</th><th>When</th><th>How long</th>${W.showWhere ? "<th>Where</th>" : ""}<th><span class="sr-only">Delete</span></th></tr></thead>
           <tbody>${W.tasks.map((t) => `<tr data-task="${t.id}">
             <td><input class="input" aria-label="What exactly" data-tk="${t.id}" data-f="text" value="${esc(t.text)}" placeholder="e.g. Finish tutorial 4, Q1–3"><div class="tk-hint tiny" data-hint="${t.id}" aria-live="polite">${hintHtml(R.hints[t.id])}</div></td>
             <td><input class="input mono" type="time" aria-label="When" data-tk="${t.id}" data-f="time" value="${t.time}"></td>
@@ -552,6 +553,16 @@ window.PlanningModule = (SX) => {
         ${askBox()}
       </div></section>
       <div class="wiz-foot">${competent() ? "<span></span>" : `<a class="btn" href="#/plan/today/1">${icon("arrow-left")}Back</a>`}<button class="btn btn-primary" type="button" data-pl="check" ${W.evaluating || !W.tasks.length ? "disabled" : ""}>${W.evaluating ? "Checking…" : W.reviewsUsed ? "Check again" : "Check my plan"}</button></div>`;
+  }
+  function checkSuggestions() {
+    const list = st.fromCheck.filter((x) => x.date === W.date && !x.done);
+    if (!list.length) return "";
+    return `<section class="panel from-check" aria-labelledby="fc-h"><div class="panel-body stack-sm">
+      <div class="label-up" id="fc-h">Suggested from last night's check</div>
+      ${list.map((x) => `<div class="fc-row">${x.editing ? `<div class="sg-edit"><label class="field"><span class="label">Task</span><input class="input" data-fc="${x.id}" data-f="text" value="${esc(x.text)}"></label><label class="field"><span class="label">Start</span><input class="input mono" type="time" data-fc="${x.id}" data-f="time" value="${x.time}"></label><label class="field"><span class="label">Minutes</span><input class="input mono" type="number" min="5" max="90" data-fc="${x.id}" data-f="mins" value="${x.mins}"></label></div>`
+        : `<div><b>${esc(x.text)}</b> <span class="mono small faint">· ${x.mins} min · ${x.time}</span><div class="tiny faint">${esc(x.concept)}: ${esc(x.why)}</div></div>`}
+        <div class="row"><button class="btn btn-sm btn-primary" type="button" data-pl="fc-accept" data-v="${x.id}">Accept</button>${x.editing ? "" : `<button class="btn btn-sm" type="button" data-pl="fc-edit" data-v="${x.id}">Edit</button>`}<button class="btn btn-sm btn-ghost" type="button" data-pl="fc-skip" data-v="${x.id}">Skip</button></div></div>`).join("")}
+    </div></section>`;
   }
   const hintHtml = (h) => (h || []).map((x) => `<span>${icon("info")}${esc(x)}</span>`).join("");
   function askBox() {
@@ -618,7 +629,7 @@ window.PlanningModule = (SX) => {
           <button class="btn btn-sm" type="button" data-pl="ics">${icon("calendar-plus")}Add to calendar (.ics)</button>
           ${W.offDay ? "" : `<button class="btn btn-sm btn-ghost" type="button" data-pl="offday">${icon("coffee")}Off day</button>`}
           <span style="flex:1"></span><span class="tiny faint">After submitting you can tick, move or add.</span></div></section>
-      <div class="wiz-foot"><a class="btn" href="#/">${icon("house")}Today</a>${afterSix() ? `<a class="btn btn-primary" href="#/?checkin=1">${icon("moon-star")}Evening check-in</a>` : `<span class="tiny faint">Evening check-in opens at 18:00.</span>`}</div>`;
+      <div class="wiz-foot"><a class="btn" href="#/">${icon("house")}Today</a>${afterSix() ? `<a class="btn btn-primary" href="#/reflection">${icon("moon-star")}Reflect on today</a>` : `<span class="tiny faint">Reflection is best in the evening (from 18:00).</span>`}</div>`;
   }
   function checkRow(t, compact) {
     const done = t.status === "done", moved = t.status === "moved";
@@ -635,37 +646,6 @@ window.PlanningModule = (SX) => {
     </div>`;
   }
 
-  // ================= §11 evening check-in (sheet over Today) =================
-  const TOOK = [["less", "Less"], ["as_planned", "As planned"], ["more", "More"], ["much_more", "Much more"]];
-  function eveningSheet() {
-    if (!W.submitted) return `<div class="sheet-wrap" data-sheet><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ev-h"><div class="sheet-head"><span class="label-up" id="ev-h" tabindex="-1" data-autofocus>Evening check-in</span><a class="icon-btn" href="#/" aria-label="Close">${icon("x")}</a></div><p class="small">There's no plan for today yet.</p><a class="btn btn-primary" href="#/plan/today/1">Plan your day</a></div></div>`;
-    const C = st.checkin || (st.checkin = { took: {}, overall: null, saving: false, result: null });
-    const ticked = W.tasks.filter((t) => t.status === "done"), other = W.tasks.filter((t) => t.status !== "done");
-    const ready = ticked.every((t) => C.took[t.id]) && C.overall;
-    const chips = (key, val) => `<div class="tchips" role="group" aria-label="Took">${TOOK.map(([k, l]) => `<button type="button" class="tchip" data-pl="took" data-v="${key}:${k}" aria-pressed="${val === k}" ${C.result ? "disabled" : ""}>${l}</button>`).join("")}</div>`;
-    return `<div class="sheet-wrap" data-sheet><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ev-h">
-      <div class="sheet-head"><span class="label-up" id="ev-h" tabindex="-1" data-autofocus>Evening check-in · about 10 seconds</span>${C.result ? "" : `<button class="btn btn-sm" type="button" data-pl="all-planned">All as planned</button>`}<a class="icon-btn" href="#/" aria-label="Close">${icon("x")}</a></div>
-      <div class="stack-sm" style="gap:14px">
-        ${ticked.map((t) => `<div class="ev-row"><div class="small"><b>${esc(t.text)}</b> <span class="faint">· planned ${t.mins} min</span></div><div class="row"><span class="tiny faint">Took:</span>${chips(t.id, C.took[t.id])}</div></div>`).join("")}
-        ${other.map((t) => `<div class="ev-row dashed small">${esc(t.text)} <span class="faint">· ${t.status === "moved" ? "moved (counts as handled)" : "not done"}</span></div>`).join("")}
-        <div class="ev-row overall"><div class="small" style="font-weight:500">Overall, today's plan took:</div>${chips("overall", C.overall)}</div>
-      </div>
-      ${C.result ? resultPanel(C.result) : `<div class="row" style="margin-top:14px"><button class="btn btn-primary" type="button" data-pl="ev-save" ${ready && !C.saving ? "" : "disabled"} aria-describedby="ev-why">${C.saving ? "Saving…" : "Save"}</button><span class="tiny faint" id="ev-why">${ready ? "" : "Choose one option for every row."}</span></div>`}
-    </div></div>`;
-  }
-  function resultPanel(r) {
-    const main = W.offDay ? "Off day: this plan is not counted." : r.onTarget ? `On target. ${r.count} of ${CFG.N_PLANS} plans toward the competent path.` : `Saved. This plan is not on target yet, which is fine; you are still at ${r.count} of ${CFG.N_PLANS}.`;
-    const change = r.change === "unlock" ? "You've planned well 4 times out of your last 5. From tomorrow you'll get lighter feedback and no morning questions. You can still ask for full feedback any time."
-      : r.change === "stepback" ? "Let's bring back the detailed feedback for a while. It'll fade again as your plans land." : null;
-    return `<div class="result enter" role="status" aria-live="polite">
-      <p><b>${main}</b></p>
-      ${W.offDay ? "" : `<p class="small">Completion today: ${r.handled} of ${r.total} tasks handled (${Math.round(r.completion * 100)}%).</p>`}
-      ${r.tip ? `<p class="small">${icon("lightbulb")} ${esc(r.tip)}</p>` : ""}
-      ${change ? `<p class="small path-change">${icon("sparkles")} ${change}</p>` : ""}
-      <div class="row"><a class="btn btn-sm" href="#/">Done</a><button class="btn btn-sm btn-ghost" type="button" data-pl="next-day">Simulate next day</button></div>
-    </div><div data-reflection-slot hidden></div>`;
-  }
-
   // ================= §13 Progress =================
   function progress() {
     const n = onTargetCount(), hist = db.history.slice(-14);
@@ -673,7 +653,7 @@ window.PlanningModule = (SX) => {
     const avg = done.length ? Math.round(done.reduce((s, h) => s + h.completion, 0) / done.length) : 0;
     return `<div class="page-head"><div><h1>Progress</h1><p class="small muted">Planning · your own history only, no comparison with others.</p></div></div>
       <div class="prog-grid">
-        <section class="panel" aria-labelledby="pg1"><div class="panel-head"><h2 id="pg1">Plans on target</h2><span class="sub">${competent() ? "Competent path" : "Beginner path"}</span></div>
+        <section class="panel" aria-labelledby="pg1" data-tour="progress-summary"><div class="panel-head"><h2 id="pg1">Plans on target</h2><span class="sub">${competent() ? "Competent path" : "Beginner path"}</span></div>
           <div class="panel-body stack-sm"><div class="big-stat"><b>${n} of ${CFG.N_PLANS}</b> <span class="small muted">plans on target</span></div>
             <div class="seg-bar" role="img" aria-label="${n} of ${CFG.N_PLANS} recent plans on target">${db.student.recent.map((x) => `<span class="${x ? "on" : ""}"></span>`).join("")}</div>
             <p class="small muted">${competent() ? "You get lighter feedback. Detailed feedback comes back if 3 plans in a row miss the target." : `${Math.max(0, CFG.BEST_OF - n)} more on-target plan${CFG.BEST_OF - n === 1 ? "" : "s"} in your last 5 unlocks lighter feedback.`}</p></div></section>
@@ -689,27 +669,42 @@ window.PlanningModule = (SX) => {
             <p class="small muted" id="bars-sum">${done.length} planned days, ${hist.length - done.length} off day${hist.length - done.length === 1 ? "" : "s"}. On average ${avg}% of tasks were handled; the best day was ${Math.max(...done.map((h) => h.completion))}%.</p>
             <details class="small"><summary>Show as a table</summary><table class="data"><thead><tr><th>Day</th><th>Completion</th></tr></thead><tbody>${hist.map((h) => `<tr><td>${fmtDate(h.date)}</td><td>${h.completion == null ? "Off day" : `${h.completion}%`}</td></tr>`).join("")}</tbody></table></details>
           </div></section>
+        ${reflectionProgress()}
         <section class="panel" aria-labelledby="pg3"><div class="panel-head"><h2 id="pg3">Time estimates by task type</h2></div>
           <div class="panel-body"><p class="small">${SERVER.tendencies().join(" ") || "Not enough ratings yet (3 per type)."}</p><p class="tiny faint">Only types with at least 3 ratings in the last 14 days.</p></div></section>
       </div>`;
   }
 
+  // demo_features_spec §3.7: reflection as a skill (private)
+  function reflectionProgress() {
+    const R = D.reflection; if (!R) return "";
+    const tr = R.depthTrend.slice(-12), c = R.calibration, pct = c.total ? Math.round((c.matched / c.total) * 100) : 0;
+    const LBL = ["", "Describes", "Explains", "Plans"];
+    const last = tr.slice(-5), mode = [3, 2, 1].find((d) => last.filter((x) => x === d).length >= 3) || last[last.length - 1];
+    return `<section class="panel" aria-labelledby="pg4"><div class="panel-head"><h2 id="pg4">Reflection depth</h2><span class="sub">private to you</span></div>
+      <div class="panel-body stack-sm">
+        <div class="depth-bars" role="img" aria-label="Depth of your last ${tr.length} reflections, 1 to 3">${tr.map((d, k) => `<span class="d${d}" style="--h:${(d / 3) * 100}%" title="Reflection ${k + 1}: ${LBL[d]}"></span>`).join("")}</div>
+        <div class="depth-legend tiny faint"><span>1 Describes</span><span>2 Explains</span><span>3 Plans</span></div>
+        <p class="small">Your recent reflections mostly <b>${LBL[mode].toLowerCase()}</b>${mode === 3 ? ": they name a cause and a next step." : mode === 2 ? ": they name a cause. Adding a next step makes them more useful." : ". Try naming a cause."}</p>
+        <p class="small"><b>Self-assessment accuracy:</b> your own rating matched the check result for ${c.matched} of ${c.total} concepts (${pct}%) in the last 14 days.</p>
+      </div></section>`;
+  }
+
   // ================= §14 Settings (planning parts) =================
   function settingsSection() {
     const ios = /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone;
-    return `<section class="panel" aria-labelledby="ps-h" style="margin-bottom:20px"><div class="panel-head"><h2 id="ps-h">Planning</h2><span class="sub">Nickname: <b class="mono">${esc(db.student.nickname)}</b></span></div>
+    return `<section class="panel" aria-labelledby="ps-h" style="margin-bottom:20px"><div class="panel-head"><h2 id="ps-h">Planning</h2><span class="sub">Signed in as <b class="mono">${esc(db.student.email)}</b></span></div>
       <div class="panel-body settings-plan">
         <div><h3>Day window</h3>${windowControl("settings")}</div>
         <div><h3>Reminders</h3>
           <div class="stack-sm"><div><button class="btn btn-sm" type="button" data-pl="notify" ${st.notif === "granted" ? "disabled" : ""}>${icon("bell")}${st.notif === "granted" ? "Notifications on" : "Enable notifications"}</button></div>
             ${ios ? `<p class="tiny faint">On iPhone, add this site to your Home Screen first (Share → Add to Home Screen).</p>` : ""}
             <div class="win-row"><label class="field"><span class="label">Morning</span><input class="input mono" type="time" value="08:00" data-pl-in="rem-am"></label><label class="field"><span class="label">Evening</span><input class="input mono" type="time" value="20:00" data-pl-in="rem-pm"></label></div></div></div>
-        <div><h3>Recovery code</h3><div class="row"><code class="rcode">${st.showRecovery ? esc(db.student.recovery) : "••••-•••••-•••••-••"}</code><button class="btn btn-sm" type="button" data-pl="rc-show" aria-pressed="${st.showRecovery}">${st.showRecovery ? "Hide" : "Show"}</button><button class="btn btn-sm" type="button" data-pl="rc-copy">${icon("copy")}Copy</button></div></div>
         <div><h3>Your data</h3><button class="btn btn-sm danger-ink" type="button" data-pl="del-open">${icon("trash-2")}Delete my data</button></div>
       </div>
       <dialog class="dlg" data-del-dialog aria-labelledby="del-h"><form method="dialog" class="stack-sm">
-        <h2 id="del-h">Delete my data</h2><p class="small">This deletes all your plans, ticks and ratings. It can't be undone.</p>
-        <label class="field"><span class="label">Type your nickname (${esc(db.student.nickname)}) to confirm</span><input class="input mono" data-pl-in="del-confirm" autocomplete="off"></label>
+        <h2 id="del-h">Delete my data</h2><p class="small">This deletes all your plans, ticks, ratings and reflections. It can't be undone.</p>
+        <label class="field"><span class="label">Type your email (${esc(db.student.email)}) to confirm</span><input class="input mono" data-pl-in="del-confirm" autocomplete="off"></label>
         <div class="row"><button class="btn btn-sm danger-ink" type="button" data-pl="del-go" disabled>Delete everything</button><button class="btn btn-sm btn-ghost" value="cancel">Cancel</button></div>
       </form></dialog></section>`;
   }
@@ -746,7 +741,6 @@ window.PlanningModule = (SX) => {
     const val = (sel) => { const el = box.querySelector(sel); return el ? el.value : ""; };
 
     W.tasks.forEach((t) => delete t.fresh);
-    if (box.querySelector("[data-sheet]")) box.addEventListener("keydown", (e) => { if (e.key === "Escape") location.hash = "#/"; });
 
     // inputs: update state without re-rendering (keeps focus); refresh only dependent regions
     box.addEventListener("input", (e) => {
@@ -755,6 +749,7 @@ window.PlanningModule = (SX) => {
       if (d.plIn === "q2") { W.busyText = t.value; const m = t.value.match(/(\d{1,2}[:.]\d{2})\s*[–-]\s*(\d{1,2}[:.]\d{2})/); W.busy = m ? [{ start: m[1].replace(".", ":").padStart(5, "0"), end: m[2].replace(".", ":").padStart(5, "0") }] : []; if (m) { const lb = t.value.replace(m[0], "").trim(); if (lb) { busyLabels["today-" + W.date] = lb; LS.set("socratix-busy-labels", busyLabels); } } }
       if (d.plIn === "q3") { W.priority = t.value; const b = box.querySelector('[data-pl="to2"]'); if (b) b.disabled = !t.value.trim(); const w = box.querySelector("#to2-why"); if (w) w.textContent = t.value.trim() ? "" : "Add your top priority to continue."; }
       if (d.plIn === "ask") W.ask.q = t.value;
+      if (d.fc) { const x = st.fromCheck.find((y) => y.id === d.fc); x[d.f] = d.f === "mins" ? +t.value : t.value; }
       if (d.plIn === "paste") st.pasteText = t.value;
       if (d.tk) {
         const tk = W.tasks.find((x) => x.id === d.tk); tk[d.f] = d.f === "mins" ? +t.value : t.value; tk.changedSinceReview = true;
@@ -774,7 +769,7 @@ window.PlanningModule = (SX) => {
         const m = box.querySelector("[data-win-msg]"); if (m) { m.textContent = bad ? "End needs to be after start." : "Tasks are planned inside this window."; m.className = `tiny ${bad ? "warn-t" : "faint"}`; }
         const sb = box.querySelector('[data-pl="save-win"]'); if (sb) sb.disabled = bad;
       }
-      if (d.plIn === "del-confirm") { const g = box.querySelector('[data-pl="del-go"]'); if (g) g.disabled = t.value.trim() !== db.student.nickname; }
+      if (d.plIn === "del-confirm") { const g = box.querySelector('[data-pl="del-go"]'); if (g) g.disabled = t.value.trim().toLowerCase() !== db.student.email; }
       if (W.started) saveDraft();
     });
     box.addEventListener("change", async (e) => {
@@ -861,7 +856,10 @@ window.PlanningModule = (SX) => {
       if (a === "q1-save-form") { const d = readDl("q1"); if (!d.course || !d.item || !d.date) { toast("Fill in course, item and date."); return; } return busy(async () => { await api(() => upsertDeadline(d)); W.extracted = { found: true, items: [d] }; W.extractEdit = false; W.extractSaved = true; saveDraft(); rr(); }); }
       if (a === "to2") { if (!W.priority.trim()) return; location.hash = "#/plan/today/2"; return; }
 
-      // wizard step 2
+      // wizard step 2: suggestions from the independence check (C4, both paths)
+      if (a === "fc-edit") { st.fromCheck.find((x) => x.id === v).editing = true; return rr(); }
+      if (a === "fc-skip") { st.fromCheck.find((x) => x.id === v).done = true; toast("Skipped."); return rr(); }
+      if (a === "fc-accept") { const x = st.fromCheck.find((y) => y.id === v); x.done = true; W.tasks.push({ ...blankTask(), text: x.text, time: x.time, mins: x.mins, link: x.link || null }); saveDraft(); toast("Added to your tasks."); return rr(); }
       if (a === "tk-add") { W.tasks.push(blankTask()); saveDraft(); rr(); const ins = document.querySelectorAll('[data-f="text"][data-tk]'); ins[ins.length - 1]?.focus(); return; }
       if (a === "tk-del") { W.tasks = W.tasks.filter((t) => t.id !== v); saveDraft(); return rr(); }
       if (a === "where") { W.showWhere = !W.showWhere; return rr(); }
@@ -916,10 +914,6 @@ window.PlanningModule = (SX) => {
       if (a === "offday") { return optimistic(() => { W.offDay = true; }, () => { W.offDay = false; }); }
       if (a === "offday-undo") { return optimistic(() => { W.offDay = false; }, () => { W.offDay = true; }); }
 
-      // evening
-      if (a === "took") { const [k, x] = v.split(":"); const C = st.checkin; if (k === "overall") C.overall = x; else C.took[k] = x; return rr(); }
-      if (a === "all-planned") { const C = st.checkin; W.tasks.filter((t) => t.status === "done").forEach((t) => (C.took[t.id] = "as_planned")); C.overall = "as_planned"; return rr(); }
-      if (a === "ev-save") return busy(async () => { const C = st.checkin; C.saving = true; rr(); try { C.result = await api(() => SERVER.checkin(W, C.took, C.overall)); W.closed = true; } finally { C.saving = false; rr(); } });
 
       // settings
       if (a === "notify") {
@@ -927,8 +921,6 @@ window.PlanningModule = (SX) => {
         try { st.notif = await Notification.requestPermission(); } catch { st.notif = "denied"; }
         toast(st.notif === "granted" ? "Notifications on. Reminders at 08:00 and 20:00." : "Notifications are blocked in your browser settings."); return rr();
       }
-      if (a === "rc-show") { st.showRecovery = !st.showRecovery; return rr(); }
-      if (a === "rc-copy") { try { await navigator.clipboard.writeText(db.student.recovery); toast("Copied"); } catch { toast("Couldn't copy. Show the code and write it down."); } return; }
       if (a === "del-open") { const dlg = box.querySelector("[data-del-dialog]"); dlg && dlg.showModal && dlg.showModal(); return; }
       if (a === "del-go") { const dlg = box.querySelector("[data-del-dialog]"); dlg && dlg.close(); LS.del("socratix-plan-draft"); LS.del("socratix-busy-labels"); toast("All your plans, ticks and ratings were deleted."); location.hash = "#/login"; return; }
     });
@@ -978,7 +970,7 @@ window.PlanningModule = (SX) => {
   function nextDay(fromPlanTomorrow) {
     const date = addDays(W.date, 1);
     if (W.submitted && !W.closed && !fromPlanTomorrow) { db.history.push({ date: W.date, completion: W.offDay ? null : Math.round((W.tasks.filter((t) => !t.added && t.status !== "planned").length / Math.max(1, W.tasks.filter((t) => !t.added).length)) * 100) }); db.history = db.history.slice(-14); }
-    W = newWizard(date, false); st.checkin = null; st.suggestion = { skipped: false, editing: false }; st.now = "09:30";
+    W = newWizard(date, false); st.suggestion = { skipped: false, editing: false }; st.now = "09:30";
     F.today = date; LS.del("socratix-plan-draft");
   }
 
@@ -986,5 +978,32 @@ window.PlanningModule = (SX) => {
   SX.on && SX.on("activity_completed", (ev) => { const t = W.tasks.find((x) => x.id === ev.plan_task_id); if (t && t.status !== "done") { t.status = "done"; toast(`Plan task "${t.text}" ticked.`); } });
   const planTask = (id) => { const t = W.tasks.find((x) => x.id === id); return t ? { id: t.id, title: t.text } : null; };
 
-  return { meta, render, bind, today: todayPage, progress: progressPage, settingsSection, planTask, _server: SERVER, _db: db };
+  // ---------- API used by Project and Reflection ----------
+  function addProjectDeadline(deadline, milestones) {
+    const id = "d" + seq++;
+    db.setup.deadlines.push({ id, ...deadline });
+    milestones.forEach((m) => db.milestones.push({ id: "m" + seq++, deadline: id, name: m.name, date: m.date, hours: m.est_hours }));
+    return id;
+  }
+  function addTask(task) {
+    const t = { ...blankTask(), ...task, changedSinceReview: true, added: W.submitted };
+    W.tasks.push(t); saveDraft(); return t;
+  }
+  function closePlan(took) {
+    const r = SERVER.checkin(W, took, null); W.closed = true; return r;
+  }
+  function addTomorrowSuggestion(x) {
+    const date = addDays(W.date, 1), free = SERVER.slots(date).filter((sl) => sl.free && sl.end - sl.start >= x.mins);
+    const time = free.length ? fromMin(free[Math.min(1, free.length - 1)].start) : "16:00";
+    const item = { id: "fc" + seq++, date, time, ...x }; st.fromCheck.push(item); return item;
+  }
+  function freeHoursOn(date) { return SERVER.freeMinutes(date) / 60; }
+
+  return {
+    meta, render, bind, today: todayPage, progress: progressPage, settingsSection, planTask,
+    plan: () => W, competent, pathLine, onTargetCount, addProjectDeadline, addTask, closePlan, addTomorrowSuggestion, freeHoursOn,
+    milestoneRules: (rows, deadline) => SERVER.milestoneRules(rows, deadline), conceptsOf: SERVER.conceptsOf, typeName: (t) => SERVER.TYPE_NAME[t] || "Other", typeOf: SERVER.typeOf,
+    dateLabel: fmtDate, today_: () => F.today, nowTime: () => st.now, elmDown: () => st.sim.elm, proto,
+    _server: SERVER, _db: db,
+  };
 };

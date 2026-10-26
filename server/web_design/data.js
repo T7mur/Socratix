@@ -55,7 +55,7 @@ window.SAMPLE = {
   // they live only in the browser (localStorage), the server keeps times.
   planning: {
     today: "2026-10-26",                      // Monday
-    student: { nickname: "quiet-otter", recovery: "river-maple-quiet-42", path: "beginner",
+    student: { email: "sam.rivera@example.ac.uk", path: "beginner",
       recent: [false, true, true, false, true] }, // last 5 counted plans, oldest first: 3 on target
     config: { N_PLANS: 5, BEST_OF: 4, QUALITY_MIN: 4, COMPLETION_MIN: 0.7, STEP_BACK_AFTER: 3, BUFFER_MIN: 0.15, MAX_TASK_MIN: 90, MILESTONE_BUFFER_DAYS: 2, ASK_PER_DAY: 5, MAX_REVIEWS_PER_PLAN: 2 },
     setup: {
@@ -287,44 +287,78 @@ window.SAMPLE = {
     suggested: { item: "hs-length", why: "Your plan includes recursion. This is the same idea in Haskell, and it's next in Inf1A." },
   },
 
-  // Student-safe ProjectSpec
-  project: {
-    project_id: "cafe-terminal", project_version: 1,
-    title: "Campus Café Terminal",
-    target_skill_ids: ["python.loops", "python.conditionals", "python.functions", "python.input_validation"],
-    excluded: ["dictionaries", "classes", "files", "databases", "networking"],
-    engineering_outcome_ids: ["engineering.requirements.v1", "engineering.testing.v1"],
-    student_brief: "Create a menu and checkout system for the campus café that runs in the terminal, without classes. Prices are integer pence.",
-    milestones: [
-      { milestone_id: "M1", title: "Requirements and design", depends_on: [], assessment_method: "rubric", status: "done", detail: "Your design plan and edge cases", review: "approved" },
-      { milestone_id: "M2", title: "Menu and command loop", depends_on: ["M1"], assessment_method: "tests", status: "done", detail: "Menu output and termination · 6 / 6 tests" },
-      { milestone_id: "M3", title: "Input validation", depends_on: ["M2"], assessment_method: "tests", status: "active", detail: "Malformed selections rejected without crashing" },
-      { milestone_id: "M4", title: "Stock and cart updates", depends_on: ["M3"], assessment_method: "tests", status: "locked", detail: "Stock never goes negative after any sequence" },
-      { milestone_id: "M5", title: "Checkout", depends_on: ["M4"], assessment_method: "tests", status: "locked", detail: "Correct totals, clear completion state" },
-      { milestone_id: "M6", title: "Change request: cancellation", depends_on: ["M5"], assessment_method: "mixed", status: "locked", detail: "Cancel restores pending state; old behaviour remains", change_request: true },
+  // ---------- Projects (demo_features_spec.md §2) ----------
+  // J1/J2 are mocked ELM calls. J2 never returns dates: rules place them (project.js).
+  projects: {
+    caps: { J1_PER_DAY: 5, J2_PER_DAY: 3, REGEN_PER_PLAN: 2 },
+    seed: [{
+      id: "pj-cafe", status: "active", type: "Coursework", hours_per_week: 5, created: "2026-10-12",
+      idea: "A terminal app for the campus café: take orders from a menu, keep a cart, and print a receipt.",
+      learn_goal: "Structure a bigger Python program into functions",
+      deadline: { course: "Project", item: "Café ordering terminal", date: "2026-11-20", time: "17:00" },
+      plan: {
+        goal: "Ship a working café ordering terminal with a cart and receipts by Fri 20 Nov.",
+        scope_in: ["Show the menu and take orders", "Cart with add, remove and total", "Print a receipt"],
+        scope_out: ["Payments", "Saving orders to a file"],
+        minimum_version: "Menu, add to cart and a printed total. Removing items can wait.",
+        milestones: [
+          { name: "Menu and order input work", done_when: "The menu prints and a valid choice adds an item", est_hours: 4, date: "2026-10-23", done: true },
+          { name: "Cart with total", done_when: "Add, remove and total pass 5 hand-written cases", est_hours: 5, date: "2026-11-02", done: false },
+          { name: "Receipt and input checks", done_when: "Bad input is asked again; receipt matches the cart", est_hours: 5, date: "2026-11-11", done: false },
+          { name: "Final run-through", done_when: "A friend orders 3 items without help", est_hours: 2, date: "2026-11-18", done: false },
+        ],
+        first_step: { text: "Write add_to_cart and test it with 3 items", minutes: 35 },
+        risks: [{ risk: "Input handling takes longer than planned", mitigation: "Start the input checks in week 2, not at the end" }, { risk: "Cart bugs hide until the receipt", mitigation: "Test the total after every change" }],
+        skills: ["python.functions", "python.lists", "python.loops", "python.input_validation"],
+      },
+      hours_planned: 16, hours_done: 6,
+    }],
+    genericQuestions: [
+      { id: "g1", text: "What is the one feature the first version must have?", kind: "text" },
+      { id: "g2", text: "Which tools or language will you use?", kind: "text" },
+      { id: "g3", text: "How will you know it's done?", kind: "text" },
+      { id: "g4", text: "What do you already know that will help?", kind: "text" },
     ],
-    requirements: [
-      { requirement_id: "PR1", description: "Show the menu with item numbers and prices in pence", milestone: "M2" },
-      { requirement_id: "PR2", description: "Repeat until the customer types checkout or quit", milestone: "M2" },
-      { requirement_id: "PR3", description: "Reject non-numeric or out-of-range selections and ask again", milestone: "M3" },
-      { requirement_id: "PR4", description: "Reject quantities below 1 without changing the cart", milestone: "M3" },
-      { requirement_id: "PR5", description: "Never let stock go negative", milestone: "M4" },
-    ],
-    cli_protocol: "> 2 x1\nAdded 1 × Flat white (310p). Cart: 310p\n> 9\nNo item 9. Choose 1–5.\n> checkout",
   },
 
-  projectCode:
-`MENU = ["Espresso", "Flat white", "Tea", "Flapjack", "Soup"]
-PRICES = [220, 310, 180, 250, 420]
-
-def read_choice(text):
-    parts = text.split()
-    item = int(parts[0])          # crashes on "abc"
-    qty = int(parts[1][1:]) if len(parts) > 1 else 1
-    if item < 1 or item > len(MENU):
-        return None
-    return item - 1, qty
-`,
+  // ---------- Reflection (demo_features_spec.md §3) ----------
+  reflection: {
+    // task text → concept (stands in for E3 concept_ids)
+    conceptOf: [
+      { re: "lab 3|loop|list total|inf2 lab", concept: "Loops & lists" },
+      { re: "lecture 5|recursion|worked example", concept: "Recursion on lists" },
+      { re: "past paper|la1|determinant|matrix", concept: "Determinants" },
+      { re: "logic|proof|formula|equivalen", concept: "Equivalences" },
+    ],
+    // verified item bank (never generated live). answer is checked by the same deterministic tools as Practice.
+    bank: [
+      { id: "i1", concept: "Loops & lists", type: "predict", prompt: "What does this print?", code: "total = 0\nfor n in [3, -1, 4]:\n    if n > 0:\n        total += n\nprint(total)", answer: "7" },
+      { id: "i2", concept: "Loops & lists", type: "choice", prompt: "Which loop adds every number in nums to total?", options: ["for n in nums: total += n", "for n in nums: if n > 0: total += n", "for n in range(len(nums) - 1): total += nums[n]"], answer: 0 },
+      { id: "i3", concept: "Loops & lists", type: "fix", prompt: "Fix the loop body so every number is counted. Type the corrected line 3.", code: "def total(nums):\n    t = 0\n    for n in nums: if n > 0: t += n\n    return t", check: "for\\s*n\\s*in\\s*nums\\s*:\\s*t\\s*\\+=\\s*n\\s*$" },
+      { id: "i4", concept: "Recursion on lists", type: "predict", prompt: "What does this print?", code: "def f(xs):\n    if not xs:\n        return 0\n    return 1 + f(xs[1:])\n\nprint(f([5, 6, 7]))", answer: "3" },
+      { id: "i5", concept: "Recursion on lists", type: "choice", prompt: "def g(n): return n + g(n - 1)   What is missing?", options: ["A base case that stops the recursion", "A loop", "A return type"], answer: 0 },
+      { id: "i6", concept: "Recursion on lists", type: "fix", prompt: "Complete the base case. Type the corrected line 2.", code: "myLength :: [a] -> Int\nmyLength [] = 1\nmyLength (_:xs) = 1 + myLength xs", check: "^myLength\\s*\\[\\]\\s*=\\s*0$" },
+      { id: "i7", concept: "Determinants", type: "expression", prompt: "det([[2, 1], [4, 3]]) = ?", answer: 2 },
+      { id: "i8", concept: "Determinants", type: "matrix", prompt: "A = [[1, 2], [3, 4]]. Enter the cofactor C₁₁.", answer: 4 },
+      { id: "i9", concept: "Determinants", type: "choice", prompt: "Swapping two rows of a matrix…", options: ["changes the sign of the determinant", "leaves the determinant unchanged", "makes the determinant zero"], answer: 0 },
+      { id: "i10", concept: "Equivalences", type: "truth", prompt: "Fill in p → q for each row.", rows: ["p=T, q=T", "p=T, q=F", "p=F, q=T", "p=F, q=F"], answer: ["T", "F", "T", "T"] },
+      { id: "i11", concept: "Functions & recursion", type: "predict", prompt: "What does this print?", code: "def digit_sum(n):\n    if n < 10:\n        return n\n    return n % 10 + digit_sum(n // 10)\n\nprint(digit_sum(305))", answer: "8" },
+      { id: "i12", concept: "Natural deduction", type: "choice", prompt: "From p → q and p, which rule gives q?", options: ["→E (modus ponens)", "∧I", "∨E"], answer: 0 },
+    ],
+    dueReview: ["Functions & recursion", "Equivalences", "Natural deduction"],
+    depthHistory: [2, 3, 3, 2, 3],                 // last 5 reflections, oldest first
+    depthTrend: [1, 1, 2, 2, 3, 2, 3, 2, 3, 3, 2, 3],  // for Progress
+    calibration: { matched: 7, total: 11 },          // last 14 days
+    reasonsPrompt: {
+      "Harder than expected": "What would make \"{task}\" easier to start tomorrow?",
+      "Didn't understand the concept": "Which part of \"{task}\" would you ask a tutor about first?",
+      "Took longer than planned": "What took the most time in \"{task}\", and could you plan that part separately?",
+      "Other tasks took the time": "Which task would you move if this happened again?",
+      "Something unplanned came up": "What would make \"{task}\" easier to start tomorrow?",
+      "Didn't get started": "What would make \"{task}\" easier to start tomorrow?",
+      "Other": "What would make \"{task}\" easier to start tomorrow?",
+    },
+  },
 
   // Review queue (instructor)
   reviewQueue: [

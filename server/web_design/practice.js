@@ -418,7 +418,7 @@ window.PracticeModule = (SX) => {
         </div>
       </article>`;
     }).join("");
-    return `<div class="groups">${html || `<div class="panel"><div class="empty"><p>No exercises match this filter.</p></div></div>`}</div>`;
+    return `<div class="groups" data-tour="practice-list">${html || `<div class="panel"><div class="empty"><p>No exercises match this filter.</p></div></div>`}</div>`;
   }
   const TYPE_IC = { code: "square-code", worked_steps: "list-ordered", explanation: "message-square-text", formula: "sigma", logic_proof: "git-commit-vertical", expression: "sigma" };
   const TYPE_NAME = { code: "code", worked_steps: "worked steps", explanation: "short explanation", formula: "formula", logic_proof: "proof", expression: "expression" };
@@ -546,7 +546,7 @@ ${paneTabs(s)}</div>
         <div class="statusline" data-region="status" id="status-${item.id}" aria-live="polite">${statusLine(item, s)}</div>
         <div data-region="output">${output(item, s)}</div>
       </section>
-      <aside class="panel help" aria-labelledby="help-h" data-region="help">${help(item, s)}</aside>
+      <aside class="panel help" aria-labelledby="help-h" data-region="help" data-tour="hint-panel">${help(item, s)}</aside>
     </div>
 
     <details class="panel proto"><summary class="small muted">Prototype only: preview states and server timers</summary>
@@ -1081,7 +1081,7 @@ ${paneTabs(s)}</div>
         if (item.type !== "explanation") item._status = s.maxLevel >= 2 ? "solved_with_hints" : "solved_on_own";
         patch("actions", "status", "output", "examples", "head", "help");
         await sleep(1200); if (!alive()) return;
-        SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
+        SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, concept: item.concept, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
         location.hash = `#/practice/${item.id}/done${parts.query.task ? `?task=${parts.query.task}` : ""}`;
         return;
       }
@@ -1163,7 +1163,7 @@ ${paneTabs(s)}</div>
       s.solved = true; item._status = "solved_with_hints"; s.fresh = "out";
       patch("input", "output", "status", "actions", "head", "help", "examples");
       await sleep(1100); if (!alive()) return;
-      SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
+      SX.emit && SX.emit("activity_completed", { activity_type: "exercise", item_type: item.type, concept: item.concept, max_hint_level: Math.max(0, s.maxLevel), plan_task_id: parts.query.task || null });
         location.hash = `#/practice/${item.id}/done${parts.query.task ? `?task=${parts.query.task}` : ""}`;
     }
 
