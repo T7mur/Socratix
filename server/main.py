@@ -61,7 +61,25 @@ def test_elm(authorization: str = Header("")):
     print(f"ELM test call by {name}")  # log the name only, never the token
     return {"user": name, "reply": reply.choices[0].message.content}
 
-# 7) Design prototype: static pages with sample data only (no secrets, no API calls)
+# 7) Planning ELM calls E1–E6 (dev tokens for now; checked and validated in planning_elm.py)
+from planning_elm import make_router  # noqa: E402
+app.include_router(make_router(elm, check_dev_token))
+
+# 8) Database check (Supabase, server only). Never returns connection details.
+import db  # noqa: E402
+
+@app.get("/health/db")
+def health_db():
+    if db.pool() is None:
+        return {"db": "not configured"}
+    try:
+        db.ping()
+    except Exception as e:
+        print(f"DB check failed: {type(e).__name__}")  # no URL, no details
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"db": "ok"}
+
+# 9) Design prototype: static pages with sample data (no secrets; ELM only through the routes above)
 app.mount(
     "/design",
     StaticFiles(directory=os.path.join(os.path.dirname(__file__), "web_design"), html=True),

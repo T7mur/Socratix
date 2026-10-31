@@ -355,10 +355,9 @@ window.ProjectModule = (SX, PL) => {
         if (!ms.length) { toast("Add at least one milestone."); return; }
         const id = "pj-" + Date.now().toString(36);
         const deadline = W.deadline ? { course: "Project", item: shortTitle(W.idea), date: W.deadline, time: "17:00" } : null;
-        if (deadline) PL.addProjectDeadline(deadline, ms.filter((m) => m.date));
         db.projects.unshift({ id, status: "active", type: W.type, hours_per_week: W.hours, created: PL.today_(), idea: W.idea, learn_goal: W.learn, deadline, plan: { ...P, milestones: ms.map((m) => ({ ...m, done: false })), scope_in: P.scope_in.filter(Boolean), scope_out: P.scope_out.filter(Boolean), risks: P.risks.filter((r) => r.risk.trim()) }, hours_planned: ms.reduce((s, m) => s + m.est_hours, 0), hours_done: 0 });
         SX.emit && SX.emit("project_accepted", { id, milestones: ms.length });
-        toast(deadline ? "Plan accepted. Its milestones now show in your Plan." : "Plan accepted. Add a deadline to place the milestones in your Plan.");
+        toast(deadline ? "Plan accepted. Its milestones show on Today under Project targets." : "Plan accepted. Add a deadline to date the milestones.");
         W = newWizard(); location.hash = `#/project/${id}`; return;
       }
       // project page
@@ -392,5 +391,11 @@ window.ProjectModule = (SX, PL) => {
     download(`${p.id}.md`, "text/markdown", md); toast("Plan exported (Markdown).");
   }
 
+  // v6 C9: project milestones stay in Project; Today lists the ones due within 7 days as "Project targets"
+  SX.projectTargets = (date) => {
+    const end = addDays(date, 7);
+    return db.projects.filter((p) => p.status === "active").flatMap((p) => p.plan.milestones.filter((m) => !m.done && m.date && m.date >= date && m.date <= end)
+      .map((m) => ({ name: m.name, date: m.date, project: p.deadline ? p.deadline.item : shortTitle(p.idea) }))).sort((a, b) => a.date.localeCompare(b.date));
+  };
   return { meta, render, bind, _db: db, placeDates };
 };

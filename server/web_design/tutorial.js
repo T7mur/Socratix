@@ -129,20 +129,102 @@ window.TutorialModule = (SX) => {
   const start = () => run(STEPS.map((_, i) => i));
   function explain() {
     const here = routeNow();
+    if (here === "plan" || here.startsWith("plan/")) return planWelcome(true);
     const idx = STEPS.map((s, i) => (s.route !== null && sameRoute(s.route, here) ? i : -1)).filter((i) => i >= 0);
     if (!idx.length) { toast("There's no explanation for this page yet. Try the full tour."); return; }
     run(idx);
   }
 
+  // ---------- Plan welcome: first visit to Plan; "Explain this page" replays it ----------
+  const PLAN_KEY = "socratix-sim-server:students.plan_welcome_seen_at";
+  const flag = (k) => { try { return !!localStorage.getItem(k); } catch { return false; } };
+  const setFlag = (k) => { try { localStorage.setItem(k, new Date().toISOString()); } catch { /* stays in memory */ } };
+  function planWelcome(replay) {
+    if (!replay && (flag(PLAN_KEY) || SX.touring || document.querySelector("dialog[open]") || document.querySelector(".driver-popover"))) return;
+    setFlag(PLAN_KEY);
+    let d = document.getElementById("plan-welcome");
+    if (!d) {
+      d = document.createElement("dialog"); d.id = "plan-welcome"; d.className = "dlg welcome"; d.setAttribute("aria-labelledby", "pw-h");
+      d.innerHTML = `<h2 id="pw-h">Planning in Socratix</h2>
+        <ol class="pw-list">
+          <li>Each day you write a short plan: what exactly you'll do, when, and for how long.</li>
+          <li>Socratix checks it and gives suggestions, not marks. You can always say "this works for me".</li>
+          <li><b>Exams & assignments</b> turn each deadline into dated stages that fit your free time.</li>
+          <li>In the evening you check in. The help fades as your plans get better.</li>
+        </ol>
+        <div class="row"><button class="btn btn-primary" type="button" data-pw="next">Next</button><button class="btn btn-ghost" type="button" data-pw="close">Close</button></div>`;
+      document.body.appendChild(d);
+      d.addEventListener("click", (e) => { const b = e.target.closest("[data-pw]"); if (!b) return; d.close(); if (b.dataset.pw === "next") setupSpotlight(); });
+    }
+    if (!d.open) { d.showModal(); d.querySelector('[data-pw="next"]').focus(); }
+  }
+  // card 2: point at the gear; setup is what makes planning work
+  async function setupSpotlight() {
+    const factory = window.driver && window.driver.js && window.driver.js.driver;
+    const el = await waitFor('[data-tour="plan-setup"]');
+    const text = "Start here: upload your timetable (.ics) and add your busy times. Planning needs them to find your free time.";
+    if (!factory || !el) { toast(text); return; }
+    if (drv) drv.destroy();
+    const one = factory({
+      animate: !reduced(), allowClose: true, overlayOpacity: 0.58, stagePadding: 6, stageRadius: 10,
+      showButtons: ["next"], nextBtnText: "Open setup", popoverClass: `sx-tour${phone() ? " sx-sheet" : ""}${reduced() ? " sx-still" : ""}`,
+      steps: [{ element: '[data-tour="plan-setup"]', popover: { title: "Set up first", description: text, side: "bottom", align: "end" } }],
+      onNextClick: () => { one.destroy(); location.hash = "#/plan/setup"; },
+      onPopoverRender: (pop) => {
+        const later = document.createElement("button"); later.type = "button"; later.className = "sx-skip"; later.textContent = "Later";
+        later.addEventListener("click", () => one.destroy());
+        pop.footer.insertBefore(later, pop.footer.firstChild);
+        setTimeout(() => pop.nextButton && pop.nextButton.focus({ preventScroll: true }), 30);
+      },
+    });
+    announce(`Set up first. ${text}`);
+    one.drive(0);
+  }
+
+  // ---------- Outlook guide: offered after the first .ics download only; always in the ? menu ----------
+  const ICS_KEY = "socratix-sim-server:students.ics_guide_offered_at";
+  function outlookGuide() {
+    let d = document.getElementById("outlook-guide");
+    if (!d) {
+      d = document.createElement("dialog"); d.id = "outlook-guide"; d.className = "dlg"; d.setAttribute("aria-labelledby", "og-h");
+      d.innerHTML = `<h2 id="og-h">Add your plan to Outlook</h2>
+        <p class="small muted">You downloaded a file called <span class="mono">plan-YYYY-MM-DD.ics</span>. It holds today's tasks as calendar events.</p>
+        <h3 class="small">Outlook on the web, or new Outlook</h3>
+        <ol class="pw-list small"><li>Open <b>Calendar</b>.</li><li>Select <b>Add calendar</b>.</li><li>Select <b>Upload from file</b>.</li><li>Choose the <span class="mono">.ics</span> file, pick your calendar, then select <b>Import</b>.</li></ol>
+        <h3 class="small">Classic Outlook for Windows</h3>
+        <ol class="pw-list small"><li><b>File</b> → <b>Open & Export</b> → <b>Import/Export</b>.</li><li>Choose <b>Import an iCalendar (.ics) or vCalendar file</b>, then the file.</li><li>Select <b>Import</b>.</li></ol>
+        <h3 class="small">Outlook for Mac</h3>
+        <ol class="pw-list small"><li>Open the <span class="mono">.ics</span> file. Outlook adds the events.</li></ol>
+        <p class="tiny faint">Menu names can differ a little between Outlook versions.</p>
+        <div class="row"><button class="btn btn-primary" type="button" data-og="close">Done</button></div>`;
+      document.body.appendChild(d);
+      d.addEventListener("click", (e) => { if (e.target.closest("[data-og]")) d.close(); });
+    }
+    if (!d.open) { d.showModal(); d.querySelector("[data-og]").focus(); }
+  }
+  SX.offerOutlookGuide = () => {
+    if (flag(ICS_KEY)) return;
+    setFlag(ICS_KEY);
+    let d = document.getElementById("outlook-offer");
+    if (!d) {
+      d = document.createElement("dialog"); d.id = "outlook-offer"; d.className = "dlg"; d.setAttribute("aria-labelledby", "oo-h");
+      d.innerHTML = `<h2 id="oo-h">Want a 1-minute guide?</h2><p class="small">It shows how to add this file to Outlook. You can find it later under the <b>?</b> button.</p>
+        <div class="row"><button class="btn btn-primary" type="button" data-oo="show">Show guide</button><button class="btn" type="button" data-oo="no">No thanks</button></div>`;
+      document.body.appendChild(d);
+      d.addEventListener("click", (e) => { const b = e.target.closest("[data-oo]"); if (!b) return; d.close(); if (b.dataset.oo === "show") outlookGuide(); });
+    }
+    if (!d.open) { d.showModal(); d.querySelector('[data-oo="show"]').focus(); }
+  };
+
   // ---------- help button + menu (§1.2) ----------
   const helpButton = () => `<div class="help-wrap"><button class="icon-btn help-btn" type="button" data-help aria-label="Help" aria-haspopup="menu" aria-expanded="false" data-tour="help-button">${icon("circle-help")}</button>
-    <div class="help-menu" role="menu" hidden><button type="button" role="menuitem" data-help-act="tour">${icon("map")}Take the full tour</button><button type="button" role="menuitem" data-help-act="explain">${icon("scan-search")}Explain this page</button></div></div>`;
+    <div class="help-menu" role="menu" hidden><button type="button" role="menuitem" data-help-act="tour">${icon("map")}Take the full tour</button><button type="button" role="menuitem" data-help-act="explain">${icon("scan-search")}Explain this page</button><button type="button" role="menuitem" data-help-act="outlook">${icon("calendar-plus")}Add your plan to Outlook</button></div></div>`;
   function bindHelp(root) {
     const btn = root.querySelector("[data-help]"); if (!btn) return;
     const menu = btn.nextElementSibling;
     const close = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
     btn.addEventListener("click", (e) => { e.stopPropagation(); const open = menu.hidden; menu.hidden = !open; btn.setAttribute("aria-expanded", String(open)); if (open) menu.querySelector("button").focus(); });
-    menu.addEventListener("click", (e) => { const b = e.target.closest("[data-help-act]"); if (!b) return; close(); b.dataset.helpAct === "tour" ? start() : explain(); });
+    menu.addEventListener("click", (e) => { const b = e.target.closest("[data-help-act]"); if (!b) return; close(); const k = b.dataset.helpAct; k === "tour" ? start() : k === "outlook" ? outlookGuide() : explain(); });
     menu.addEventListener("keydown", (e) => {
       const items = [...menu.querySelectorAll("button")], k = items.indexOf(document.activeElement);
       if (e.key === "Escape") { close(); btn.focus(); }
@@ -152,5 +234,5 @@ window.TutorialModule = (SX) => {
     document.addEventListener("click", (e) => { if (!e.target.closest(".help-wrap")) close(); }, { once: true });
   }
 
-  return { maybeWelcome, start, explain, helpButton, bindHelp, resetSeen, STEPS };
+  return { maybeWelcome, planWelcome, start, explain, helpButton, bindHelp, resetSeen, STEPS };
 };

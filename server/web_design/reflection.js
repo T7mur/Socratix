@@ -95,7 +95,7 @@ window.ReflectionModule = (SX, PL) => {
       ${sectionA(W, st)}
       ${st.saved ? savedSummary(st) : sectionB(W, st)}
       ${st.saved ? sectionC(W, st) : ""}
-      ${st.saved || W.offDay ? sectionD(W, st) : ""}
+      ${st.saved || !W.tasks.length ? sectionD(W, st) : ""}
       ${PL.proto()}${log()}</div>`;
   }
   function log() {
@@ -129,12 +129,12 @@ window.ReflectionModule = (SX, PL) => {
   }
   function savedSummary(st) {
     const r = st.result, W = PL.plan();
-    const main = W.offDay ? "Off day: this plan is not counted." : r.onTarget ? `On target. ${r.count} of 5 plans toward the competent path.` : `Saved. This plan is not on target yet, which is fine; you are still at ${r.count} of 5.`;
+    const main = W.dayKind === "rest" ? "Saved." : r.onTarget ? `On target. ${r.count} of 5 plans toward the competent path.` : `Saved. This plan is not on target yet, which is fine; you are still at ${r.count} of 5.`;
     const change = r.change === "unlock" ? "You've planned well 4 times out of your last 5. From tomorrow you'll get lighter feedback and no morning questions. You can still ask for full feedback any time."
       : r.change === "stepback" ? "Let's bring back the detailed feedback for a while. It'll fade again as your plans land." : null;
     return `<section class="panel result enter" role="status" aria-live="polite"><div class="panel-body stack-sm">
       <div class="row between"><b>${main}</b><span class="ptag neutral">Depth ${st.depth} · ${["", "Describes", "Explains", "Plans"][st.depth]}</span></div>
-      ${W.offDay ? "" : `<p class="small">Completion today: ${r.handled} of ${r.total} tasks handled (${Math.round(r.completion * 100)}%).</p>`}
+      ${W.dayKind === "rest" ? "" : `<p class="small">Completion today: ${r.handled} of ${r.total} tasks handled (${Math.round(r.completion * 100)}%).</p>`}
       ${r.tip ? `<p class="small">${icon("lightbulb")} ${esc(r.tip)}</p>` : ""}
       ${change ? `<p class="small path-change">${icon("sparkles")} ${change}</p>` : ""}
     </div></section>`;

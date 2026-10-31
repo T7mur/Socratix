@@ -1407,3 +1407,19 @@ table.ex td:first-child { min-width: 0; }
 }
 /* phone tour: the current target sits above the dim layer (no cut-out spotlight on small screens) */
 .sx-phone-tour .tour-pulse { position: relative; z-index: 10001; background: var(--panel); }
+
+/* ---------- planning v6: gear, rest day, exams & assignments, guides ---------- */
+.page-head:has(.plan-gear) { flex-wrap: nowrap; align-items: flex-start; }
+.page-head .plan-gear { flex: none; width: 44px; height: 44px; }
+.plan-cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.in-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.in-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.tick.sm { width: 28px; height: 28px; }
+.ms-table tr.is-done .input { text-decoration: line-through; color: var(--ink-3); }
+.pw-list { margin: 0 0 var(--s4); padding-left: 1.2em; display: grid; gap: 6px; }
+.dlg h3 { margin: var(--s3) 0 4px; }
+@media (max-width: 639px) {
+  .plan-cards.two { grid-template-columns: minmax(0, 1fr); }
+  .in-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .in-list li .seg { grid-column: 1 / -1; order: 3; }
+}

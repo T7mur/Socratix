@@ -57,14 +57,17 @@ window.SAMPLE = {
     today: "2026-10-26",                      // Monday
     student: { email: "sam.rivera@example.ac.uk", path: "beginner",
       recent: [false, true, true, false, true] }, // last 5 counted plans, oldest first: 3 on target
-    config: { N_PLANS: 5, BEST_OF: 4, QUALITY_MIN: 4, COMPLETION_MIN: 0.7, STEP_BACK_AFTER: 3, BUFFER_MIN: 0.15, MAX_TASK_MIN: 90, MILESTONE_BUFFER_DAYS: 2, ASK_PER_DAY: 5, MAX_REVIEWS_PER_PLAN: 2 },
+    config: { N_PLANS: 5, BEST_OF: 4, QUALITY_MIN: 4, COMPLETION_MIN: 0.7, STEP_BACK_AFTER: 3, BUFFER_MIN: 0.15, MAX_TASK_MIN: 90, MILESTONE_BUFFER_DAYS: 2, MILESTONES_OPTIONAL_UNDER_DAYS: 7, ASK_PER_DAY: 5, MAX_REVIEWS_PER_PLAN: 2, REST_DAYS_PER_WEEK: 2 },
     setup: {
       window: { start: "09:00", end: "21:00" },
+      weeklyHours: 20, dailyCapMin: 240,          // planning_methodology v6 §2 (design choices, not research-derived)
       updated: "Mon 19 Oct",
       deadlines: [
-        { id: "d1", course: "INF2", item: "Coursework 2", date: "2026-11-09", time: "14:00" },
-        { id: "d2", course: "LA1", item: "Midterm", date: "2026-11-05", time: "10:00" },
-        { id: "d3", course: "INF1A", item: "Tutorial sheet 5", date: "2026-10-28", time: "10:00" },
+        { id: "d1", course: "INF2", item: "Coursework 2", kind: "assignment", subtype: "code", date: "2026-11-09", time: "14:00",
+          parts: [{ name: "Lab 3 tasks", size: "m" }, { name: "Report draft", size: "l" }, { name: "Tests", size: "s" }] },
+        { id: "d2", course: "LA1", item: "Midterm", kind: "exam", date: "2026-11-05", time: "10:00", papers: 2, paperMin: 120,
+          topics: [{ name: "Matrices", confidence: "low" }, { name: "Vectors", confidence: "ok" }, { name: "Linear systems", confidence: "ok" }, { name: "Determinants", confidence: "high" }] },
+        { id: "d3", course: "INF1A", item: "Tutorial sheet 5", kind: "assignment", subtype: "maths", date: "2026-10-28", time: "10:00", parts: [{ name: "Q1–3", size: "s" }] },
       ],
       classes: [
         { id: "c1", day: 1, start: "11:00", end: "12:00", name: "INF2 lecture" },
@@ -83,21 +86,14 @@ window.SAMPLE = {
       ],
       busyLabelsSeed: { b1: "Café shift", b2: "Café shift", b3: "Family lunch" },
     },
-    milestones: [
-      { id: "m1", deadline: "d1", name: "Lab 3 submitted", date: "2026-10-30", hours: 6 },
-      { id: "m2", deadline: "d1", name: "Draft report", date: "2026-11-04", hours: 50 },
-      { id: "m3", deadline: "d1", name: "Final checks", date: "2026-11-06", hours: 8 },
-      { id: "m4", deadline: "d2", name: "Revision notes ch. 1–4", date: "2026-10-23", hours: 4 },
-      { id: "m5", deadline: "d2", name: "Past paper 1 done", date: "2026-10-30", hours: 3 },
-      { id: "m6", deadline: "d2", name: "Past papers 2–3 done", date: "2026-11-03", hours: 8 },
-    ],
+    milestones: [],                           // built from the v6 Exam/Assignment templates when the page starts
     // §9 test fixture: starts at 3/5, reaches 5/5 when both suggestions are resolved
     tasks: [
       { id: "t1", text: "Finish INF2 lab 3, Q1–4", time: "10:00", mins: 60, where: "" },
       { id: "t2", text: "Revise lecture 5", time: "13:00", mins: 45, where: "" },
       { id: "t3", text: "Past paper 1, all questions", time: "17:00", mins: 40, where: "Library" },
     ],
-    // closed plans, oldest first (completion in %, null = off day); today is appended at check-in
+    // closed plans, oldest first (completion in %, null = rest day); today is appended at check-in
     history: [
       { date: "2026-10-12", completion: 67 }, { date: "2026-10-13", completion: 100 }, { date: "2026-10-14", completion: 50 },
       { date: "2026-10-15", completion: 75 }, { date: "2026-10-16", completion: null }, { date: "2026-10-17", completion: 33 },
@@ -107,13 +103,9 @@ window.SAMPLE = {
     ],
     // "took" ratings of ticked tasks in the last 14 days, by task type
     ratings: { coding: ["more", "much_more", "as_planned", "more"], reading: ["as_planned", "less", "as_planned"], maths: ["more", "as_planned"] },
-    // mock ELM responses (E2 questions, E4 suggestion, E5 answers)
-    e2: {
-      d1: ["Which parts of Coursework 2 depend on Lab 3?", "What would a finished draft look like the week before?", "Who could read your draft before the final checks?"],
-      d2: ["Which chapters come up most often in past papers?", "When will you do a paper under timed conditions?"],
-    },
+    // fallbacks when ELM can't answer (v6 §10): generic E2 questions; the gap that E4 turns into a task (from Knowledge Gap)
     e2Generic: ["What must be finished first?", "What could go wrong?", "What would \"done\" look like a week before?"],
-    e4: { concept: "Recursion on lists", text: "2 recursion exercises on lists", mins: 30, time: "16:00", link: { kind: "exercise", ref: "hs-length" } },
+    gapForE4: { concept: "Recursion on lists", link: { kind: "exercise", ref: "hs-length" } },
     askUsed: 2,
   },
 

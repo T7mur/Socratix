@@ -1,8 +1,16 @@
-// Socratix — clickable design prototype. Hash-routed, sample data only, no network calls.
+// Socratix — clickable design prototype. Hash-routed, sample data; ELM calls go through our server only when a dev token is set.
 (() => {
   "use strict";
 
   const D = window.SAMPLE;
+  // The sample data is written for Mon 26 Oct 2026; move every date so the demo runs on the real today.
+  (() => {
+    const n = new Date(), real = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    const shift = Math.round((Date.parse(real) - Date.parse(D.planning.today)) / 86400000);
+    const mv = (s) => new Date(Date.parse(s + "T00:00:00Z") + shift * 86400000).toISOString().slice(0, 10);
+    const walk = (o) => Object.keys(o).forEach((k) => { const v = o[k]; if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) o[k] = mv(v); else if (v && typeof v === "object") walk(v); });
+    if (shift) walk(D);
+  })();
 
   // ---------- state (would come from the API in the real app) ----------
   const state = {
@@ -452,6 +460,7 @@
     if (id === "project") { PJ.bind(app, hashParts()); PL.bind(app, id, hashParts()); }       // PL: shared "Prototype only" controls
     if (id === "reflection") { RF.bind(app); PL.bind(app, id, hashParts()); }
     if (id === "today" || id === "plan" || id === "progress" || id === "settings") PL.bind(app, id, hashParts());
+    if (id === "plan") setTimeout(() => TU.planWelcome(), 350); // first Plan visit only
 
     if (id === "skills") {
       on("[data-view]", (b) => { state.skills.view = b.dataset.view; render(); });

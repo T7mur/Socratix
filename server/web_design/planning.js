@@ -1,13 +1,14 @@
 // Socratix — Planning: Today, Plan landing, Setup, Backward planning, the 4-step daily wizard,
 // evening check-in, Progress and the planning parts of Settings.
-// Built from planning_ui.md v2; rules from planning_execution_plan.md §7. Sample data only.
-// SERVER below simulates the API (rules + mocked ELM calls E1–E5) so the prototype is clickable.
+// Behaviour: planning_methodology.md v6 (+ session decisions: rest day, study-time dates); layout: planning_ui.md v2.
+// SERVER below simulates the planning API rules; ELM calls (E1–E6) go to our server with a dev token, else rules/templates.
 // Copy rule: suggestions, never verdicts — the UI never says fail / wrong / weak / bad / demoted.
 window.PlanningModule = (SX) => {
   "use strict";
   const { D, esc, icon, toast, sleep } = SX;
   const F = D.planning;
   const CFG = F.config;
+  const ST = window.SXstrategy, ICS = window.SXics;
 
   // ---------- dates and times ----------
   const DAY = 86400000;
@@ -33,18 +34,20 @@ window.PlanningModule = (SX) => {
   };
   const busyLabels = LS.get("socratix-busy-labels", null) || { ...F.setup.busyLabelsSeed };
 
-  // ================= simulated SERVER (rules §7 + mock ELM) =================
+  // ================= simulated SERVER (rules) =================
   const db = {
     student: { ...F.student, recent: [...F.student.recent] },
     setup: JSON.parse(JSON.stringify(F.setup)),
     hasSetup: true,
     milestones: F.milestones.map((m) => ({ ...m })),
-    history: F.history.map((h) => ({ ...h })),
+    history: F.history.map((h) => ({ ...h, kind: h.completion == null ? "rest" : "normal" })),
     ratings: JSON.parse(JSON.stringify(F.ratings)),
     askLeft: CFG.ASK_PER_DAY - F.askUsed,
     oneOffBusy: {},           // date -> [{start,end}] (times only)
+    ics: LS.get("socratix-ics", null), // {events, first, last} from the student's calendar file: stays on this device
   };
   delete db.setup.busyLabelsSeed;
+  if (db.ics) db.setup.classes = []; // the real calendar replaces the sample timetable
 
   const SERVER = (() => {
     // 7.1 free minutes = day window minus the union of class and busy blocks on that date
@@ -53,6 +56,7 @@ window.PlanningModule = (SX) => {
       db.setup.classes.filter((c) => c.day === d).forEach((c) => out.push({ start: toMin(c.start), end: toMin(c.end), label: c.name, kind: "class" }));
       db.setup.busy.filter((b) => b.days.includes(d)).forEach((b) => out.push({ start: toMin(b.start), end: toMin(b.end), label: "busy", id: b.id, kind: "busy" }));
       [...(db.oneOffBusy[date] || []), ...extra].forEach((b) => out.push({ start: toMin(b.start), end: toMin(b.end), label: "busy", kind: "busy" }));
+      if (db.ics) db.ics.events.filter((e) => e.date === date).forEach((e) => out.push({ start: toMin(e.start), end: toMin(e.end), label: e.status, kind: "ics" }));
       return out.filter((b) => b.start != null && b.end > b.start).sort((a, b) => a.start - b.start);
     }
     function freeMinutes(date, extra) {
@@ -66,7 +70,7 @@ window.PlanningModule = (SX) => {
       const ws = toMin(db.setup.window.start), we = toMin(db.setup.window.end);
       const bl = blocksFor(date, extra).map((b) => ({ ...b, start: Math.max(ws, b.start), end: Math.min(we, b.end) })).filter((b) => b.end > b.start);
       const out = []; let t = ws;
-      bl.forEach((b) => { if (b.start > t) out.push({ start: t, end: b.start, free: true }); out.push({ start: b.start, end: b.end, free: false, label: b.kind === "class" ? b.label : "busy" }); t = Math.max(t, b.end); });
+      bl.forEach((b) => { if (b.start > t) out.push({ start: t, end: b.start, free: true }); if (b.end > t) out.push({ start: Math.max(t, b.start), end: b.end, free: false, label: b.kind === "class" ? b.label : b.label === "tentative" ? "tentative" : "busy" }); t = Math.max(t, b.end); });
       if (t < we) out.push({ start: t, end: we, free: true });
       return out;
     }
@@ -92,32 +96,7 @@ window.PlanningModule = (SX) => {
 
     function dueSoon(date, days = 7) { return db.milestones.filter((m) => diffDays(date, m.date) >= 0 && diffDays(date, m.date) <= days).sort((a, b) => a.date.localeCompare(b.date)); }
 
-    // E3 plan review (mocked). Returns null when ELM is down, so the UI falls back.
-    function e3(tasks, ctx) {
-      if (ctx.elmDown) return null;
-      const soon = dueSoon(ctx.date);
-      const verdicts = {};
-      tasks.forEach((t) => {
-        const cls = classify(t.text), type = typeOf(t.text);
-        const big = /\ball questions\b|\bwhole\b|\bentire\b|\ball of\b|\bfull\b|\beverything\b/i.test(t.text) || (/past paper/i.test(t.text) && !/q\d|question \d|\d\s*[–-]\s*\d/i.test(t.text) && t.mins < 120);
-        const ms = soon.find((m) => m.name.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !/done|submitted/.test(w)).some((w) => t.text.toLowerCase().includes(w)));
-        let v;
-        if (big) v = { finishable: "yes", scopeOk: false, issue: "scope_too_big", note: /past paper/i.test(t.text) ? "A full past paper usually takes 2–3 hours. Split it, or plan only part today?" : `This looks bigger than ${t.mins} min. Split it, or plan only part today?` };
-        else if (cls !== "pass") v = { finishable: "no", scopeOk: true, issue: "not_finishable", note: `How will you know you are done? Example: "${rewriteOf(t)}"` };
-        else v = { finishable: "yes", scopeOk: true, issue: null, note: `Clear finish line, fits the slot.${ms ? ` Linked to milestone "${ms.name} (${WD[wd(ms.date)]})".` : ""}` };
-        verdicts[t.id] = { ...v, type, milestoneId: ms ? ms.id : null, concept_ids: conceptsOf(t.text), source: "elm" };
-      });
-      const words = (ctx.priority || "").toLowerCase().replace(/\bcs\b/g, "inf").split(/\W+/).filter((w) => w.length > 2 && !/^(the|and|for|today|top|my|get|some)$/.test(w));
-      const syn = { coursework: ["cw", "lab", "coursework"], inf: ["inf", "inf2", "inf1a"], maths: ["la1", "past paper", "algebra"], revision: ["revise", "past paper"] };
-      const covers = (t) => words.some((w) => t.text.toLowerCase().includes(w) || (syn[w] || []).some((s) => t.text.toLowerCase().includes(s)));
-      const cov = ctx.allTasks.find(covers);
-      return { verdicts, priorityCovered: words.length ? !!cov : null, coveredBy: cov ? cov.id : null };
-    }
     function conceptsOf(text) { return ((D.reflection && D.reflection.conceptOf) || []).filter((c) => new RegExp(c.re, "i").test(text)).map((c) => c.concept); }
-    function rewriteOf(t) {
-      if (/lecture\s*5/i.test(t.text)) return "Revise lecture 5: redo the 3 worked examples, 45 min";
-      return `${t.text.replace(/[.\s]+$/, "")}: finish one named part, ${t.mins} min`;
-    }
     // Rules-only verdict (after MAX_REVIEWS or for a quick local re-check)
     function ruleVerdict(t) {
       const cls = classify(t.text);
@@ -186,50 +165,12 @@ window.PlanningModule = (SX) => {
       return out;
     }
 
-    // E1 extract (mocked with a small parser): "cw2 for inf2 moved to thursday 2pm"
-    function e1(text, ctx) {
-      if (ctx.elmDown) return { found: false };
-      const found = [];
-      String(text).split(/\n|;|(?<=[.!?])\s+/).forEach((line) => {
-        const l = line.toLowerCase();
-        const course = (l.match(/\b(inf\s?2|inf\s?1a|inf\s?1|la\s?1|inf\d\w*)\b/) || [])[1];
-        let item = null; const m1 = l.match(/\b(cw|coursework)\s*(\d+)/), m2 = l.match(/\b(lab|tutorial sheet|tutorial|sheet|assignment|quiz|midterm|exam)\s*(\d*)/);
-        if (m1) item = `Coursework ${m1[2]}`; else if (m2) item = (m2[1][0].toUpperCase() + m2[1].slice(1)) + (m2[2] ? ` ${m2[2]}` : "");
-        let date = null;
-        const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        const dn = days.findIndex((d) => new RegExp(`\\b${d.slice(0, 3)}(${d.slice(3)})?\\b`).test(l));
-        if (/\btomorrow\b/.test(l)) date = addDays(ctx.date, 1);
-        else if (dn >= 0) { let k = (dn - wd(ctx.date) + 7) % 7; if (k === 0) k = 7; date = addDays(ctx.date, k); }
-        const dm = l.match(/\b(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/) || l.match(/\b(\d{1,2})\/(\d{1,2})\b/);
-        if (dm) { const mon = isNaN(dm[2]) ? MON.findIndex((x) => x.toLowerCase() === dm[2]) : +dm[2] - 1; date = `2026-${String(mon + 1).padStart(2, "0")}-${String(+dm[1]).padStart(2, "0")}`; }
-        let time = "23:59"; const tm = l.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/) || l.match(/\b(\d{1,2}):(\d{2})\b/);
-        if (tm) { let h = +tm[1]; if (tm[3] === "pm" && h < 12) h += 12; if (tm[3] === "am" && h === 12) h = 0; time = `${String(h).padStart(2, "0")}:${tm[2] || "00"}`; } else if (/\bnoon\b/.test(l)) time = "12:00";
-        if (course && item && date) found.push({ course: course.replace(/\s/g, "").toUpperCase(), item, date, time });
-      });
-      return found.length ? { found: true, items: found } : { found: false };
-    }
-
-    // E4 suggestion (competent path only; none when gaps are unavailable)
-    const e4 = (ctx) => (ctx.elmDown || db.student.path !== "competent" ? null : { ...F.e4 });
-    // E5 ask (mocked answers; capped per day)
-    function e5(q, ctx) {
-      if (db.askLeft <= 0) return { capped: true };
-      db.askLeft--;
-      if (ctx.elmDown) return { answer: "I can't answer right now. Try the template: [finish] + [what, with a number or name]." };
-      const l = q.toLowerCase();
-      const a = /long|time|minutes|how much/.test(l) ? "Look at your free slots: you have about 10 free hours today. Keep each task under 90 minutes and leave some time unplanned."
-        : /order|first|start/.test(l) ? "Start with the task linked to your nearest milestone (Lab 3 submitted, Fri). It has the clearest finish line."
-        : /specific|vague|clear/.test(l) ? "Name what will exist when you stop, e.g. \"Q1–4 answered\" or \"3 worked examples redone\"."
-        : "Keep the plan small enough to finish. A task is clear when you can tell, at the end, whether it's done.";
-      return { answer: a };
-    }
-
     // 7.6 completion / on target / path switch — only at check-in
     function checkin(W, took, overall) {
       const original = W.tasks.filter((t) => !t.added);
       const handled = original.filter((t) => t.status === "done" || t.status === "moved").length;
       const completion = original.length ? handled / original.length : 0;
-      const onTarget = W.offDay ? null : W.quality >= CFG.QUALITY_MIN && completion >= CFG.COMPLETION_MIN;
+      const onTarget = W.dayKind === "rest" ? null : (W.quality || 0) >= CFG.QUALITY_MIN && completion >= CFG.COMPLETION_MIN; // rest_over_cap is scored like a normal day
       const before = db.student.path;
       W.tasks.filter((t) => t.status === "done" && took[t.id]).forEach((t) => { const ty = (t.verdict && t.verdict.type) || SERVER.typeOf(t.text); (db.ratings[ty] = db.ratings[ty] || []).push(took[t.id]); });
       let change = null;
@@ -239,7 +180,7 @@ window.PlanningModule = (SX) => {
         if (before === "beginner" && n >= CFG.BEST_OF) { db.student.path = "competent"; change = "unlock"; }
         else if (before === "competent" && db.student.recent.slice(-CFG.STEP_BACK_AFTER).every((x) => x === false)) { db.student.path = "beginner"; change = "stepback"; }
       }
-      db.history.push({ date: W.date, completion: W.offDay ? null : Math.round(completion * 100) });
+      db.history.push({ date: W.date, completion: W.dayKind === "rest" ? null : Math.round(completion * 100), kind: W.dayKind === "rest" ? "rest" : W.dayKind });
       db.history = db.history.slice(-14);
       return { completion, handled, total: original.length, onTarget, change, count: db.student.recent.filter(Boolean).length, tip: tip() };
     }
@@ -254,19 +195,80 @@ window.PlanningModule = (SX) => {
       });
     }
 
-    return { blocksFor, freeMinutes, slots, classify, typeOf, TYPE_NAME, dueSoon, conceptsOf, e1, e3, e4, e5, rewriteOf, ruleVerdict, rules, quality, milestoneRules, checkin, tendencies };
+    return { blocksFor, freeMinutes, slots, classify, typeOf, TYPE_NAME, dueSoon, conceptsOf, ruleVerdict, rules, quality, milestoneRules, checkin, tendencies };
   })();
 
   // ================= client state =================
   const st = {
-    now: "09:30",
+    now: (() => { const n = new Date(); return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; })(),
     sim: { elm: false, waking: false, net: false, push: false, fresh: false },
-    weeklyDismissed: false, fromCheck: [],
+    weeklyDismissed: false, fromCheck: [], fromPlanDone: {},
     setupTab: "fill", preview: null, readMsg: null, editDeadline: null,
-    msDeadline: "d1", msEdit: null, msTags: {},
-    toastAct: null, suggestion: { skipped: false, editing: false },
+    msTab: "exam", msDeadline: null, msEdit: null, msTags: {}, msAdd: false, e2: {}, redate: null, skip: null,
+    toastAct: null, suggestion: { skipped: false, editing: false }, e4: undefined,
     notif: "default",
   };
+
+  // ================= ELM (through our server; dev token for now) =================
+  // Returns the reply, or null → the caller uses its rule/template fallback (v6 §10: the plan is never blocked).
+  const TOKEN_KEY = "socratix-elm-token";
+  const elmToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; } };
+  async function elm(call, payload) {
+    if (st.sim.elm || !elmToken()) return null;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const r = await fetch(`/api/planning/${call}`, { method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${elmToken()}` }, body: JSON.stringify(payload) });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return j && !j.fallback ? j : null;
+    } catch { return null; } finally { clearTimeout(timer); }
+  }
+
+  // E1: text → deadlines | exam topics | assignment parts. Fallback {found:false} → the student fills the form (v6 §15).
+  async function e1(text, mode) {
+    if (!String(text).trim()) return { found: false };
+    const r = await elm("e1", { text, mode, today: F.today });
+    const items = r && Array.isArray(r.items) ? r.items.filter((x) => (mode === "deadlines" ? x.course && x.item && /^\d{4}-\d{2}-\d{2}$/.test(x.date || "") : x.name)) : [];
+    return items.length ? { found: true, items: items.map((x) => (mode === "deadlines" ? { ...x, course: String(x.course).toUpperCase(), time: x.time || "23:59" } : x)) } : { found: false };
+  }
+  // E3 plan review. Returns null when ELM can't answer, so every task shows "Couldn't check this one" (v6 §15).
+  const ISSUE = { vague_outcome: "not_finishable", unclear_target: "not_finishable", scope_too_big: "scope_too_big", too_long_split: "scope_too_big" };
+  async function e3(tasks, full) {
+    const raw = await elm("e3", {
+      path: db.student.path, full, top_priority: W.priority,
+      due_milestones: SERVER.dueSoon(W.date).map((m) => ({ id: m.id, name: m.name })),
+      concepts: [...new Set(((D.reflection && D.reflection.conceptOf) || []).map((c) => c.concept))],
+      tasks: tasks.map((t) => ({ id: t.id, text: t.text, minutes: +t.mins, rule_specificity: SERVER.classify(t.text) })),
+      other_tasks: W.tasks.filter((t) => !tasks.includes(t)).map((t) => ({ id: t.id, text: t.text })),
+    });
+    if (!raw || !Array.isArray(raw.tasks)) return null;
+    const verdicts = {};
+    raw.tasks.forEach((x) => {
+      if (!tasks.some((t) => t.id === x.id)) return; // ids must match the input
+      const issue = x.finishable === "no" ? "not_finishable" : x.scope_ok === false ? "scope_too_big" : ISSUE[x.issue_code] || null;
+      verdicts[x.id] = { finishable: ["yes", "no", "unsure"].includes(x.finishable) ? x.finishable : "unsure", scopeOk: x.scope_ok !== false, issue, note: x.note || "",
+        type: SERVER.TYPE_NAME[x.task_type] ? x.task_type : SERVER.typeOf(tasks.find((t) => t.id === x.id).text),
+        milestoneId: db.milestones.some((m) => m.id === x.milestone_id) ? x.milestone_id : null, course: x.course || null,
+        concept_ids: Array.isArray(x.concept_ids) ? x.concept_ids.filter((c) => c !== "unsure") : [], source: "elm" };
+    });
+    return { verdicts, priorityCovered: typeof raw.priority_covered === "boolean" ? raw.priority_covered : null, coveredBy: raw.covered_by || null,
+      rewrite: raw.rewrite && raw.rewrite.id && raw.rewrite.text ? { taskId: raw.rewrite.id, text: raw.rewrite.text } : null };
+  }
+
+  // ================= milestones on study time (strategy.js, v6 §6–§8) =================
+  const stCfg = () => ({ ...ST.DEFAULTS, WEEKLY_STUDY_HOURS: +db.setup.weeklyHours || 20, DAILY_STUDY_CAP_MIN: +db.setup.dailyCapMin || 240, BUFFER_MIN: CFG.BUFFER_MIN, MILESTONE_BUFFER_DAYS: CFG.MILESTONE_BUFFER_DAYS });
+  const gapsOf = (d) => SERVER.slots(d).filter((x) => x.free).map((x) => [x.start, x.end]);
+  const isRestDay = (d) => db.history.some((h) => h.date === d && h.kind === "rest") || (typeof W !== "undefined" && W.date === d && W.dayKind === "rest");
+  const studyCap = () => ST.capacity({ gapsOf, isRest: isRestDay, today: F.today, cfg: stCfg() });
+  function buildStages(dl) {
+    const C = studyCap(), cfg = stCfg();
+    const r = dl.kind === "exam"
+      ? ST.examPlan({ today: F.today, examDate: dl.date, topics: dl.topics || [], paperMin: dl.paperMin, C, gapsOf, cfg })
+      : ST.assignmentPlan({ today: F.today, due: dl.date, subtype: dl.subtype, parts: dl.parts || [], C, cfg });
+    return { ...r, milestones: r.milestones.map((m) => ({ id: "m" + seq++, deadline: dl.id, ...m, doneHours: 0, status: "open", redateCount: 0, saved: false })) };
+  }
+  const msWarnings = (rowsFor = {}) => ST.warnings({ today: F.today, C: studyCap(), cfg: stCfg(),
+    deadlines: db.setup.deadlines.map((d) => ({ id: d.id, due: d.date, milestones: rowsFor[d.id] || db.milestones.filter((m) => m.deadline === d.id) })) });
   const newWizard = (date, withFixture) => ({
     date, step: 1, started: false,
     q1: "", extracted: null, extractEdit: false, extractSaved: false,
@@ -275,7 +277,7 @@ window.PlanningModule = (SX) => {
     showWhere: false, template: false, ask: { open: false, q: "", answer: null },
     evaluated: false, evaluating: false, reviewsUsed: 0, rulesOnly: false,
     priorityCovered: null, coveredBy: null, priorityOverride: false, rewrite: null, fullFeedback: false,
-    quality: null, submitted: false, offDay: false, linkAsked: false, links: {}, closed: false,
+    quality: null, submitted: false, dayKind: "normal", restAsked: false, restPlan: null, linkAsked: false, links: {}, closed: false,
   });
   let seq = 10;
   function blankTask() { return { id: "t" + seq++, text: "", time: "", mins: 30, where: "", verdict: null, overridden: false, accepted: false, changedSinceReview: true, status: "planned", movedTo: null }; }
@@ -283,6 +285,8 @@ window.PlanningModule = (SX) => {
   const clearInFlight = (d) => { d.evaluating = false; d.submitting = false; d.reading = false; if (d.ask) d.ask.loading = false; return d; };
   let W = (() => { const d = LS.get("socratix-plan-draft", null); return d && d.date === F.today && !d.submitted ? clearInFlight(d) : newWizard(F.today, true); })();
   const saveDraft = () => { if (!W.submitted) LS.set("socratix-plan-draft", clearInFlight(JSON.parse(JSON.stringify(W)))); };
+  // the sample deadlines get their v6 template stages once, on the student's real calendar
+  if (!db.milestones.length) db.milestones = db.setup.deadlines.filter((d) => d.date >= F.today).flatMap((d) => buildStages(d).milestones.map((m) => ({ ...m, saved: true })));
 
   const competent = () => db.student.path === "competent";
   const onTargetCount = () => db.student.recent.filter(Boolean).length;
@@ -310,7 +314,9 @@ window.PlanningModule = (SX) => {
 
   // ---------- shared bits ----------
   const tag = (kind, text) => `<span class="ptag ${kind}">${text}</span>`;
-  const head = (title, desc = "") => `<div class="page-head"><div><h1>${title}</h1><p class="path-line">${pathLine()}</p>${desc ? `<p class="small muted">${desc}</p>` : ""}</div></div>`;
+  // Plan pages: setup sits behind the gear (top right), not in a landing card
+  const head = (title, desc = "") => `<div class="page-head"><div><h1>${title}</h1><p class="path-line">${pathLine()}</p>${desc ? `<p class="small muted">${desc}</p>` : ""}</div>
+    <a class="icon-btn plan-gear" href="#/plan/setup" aria-label="Planning setup" title="Planning setup" data-tour="plan-setup">${icon("settings")}</a></div>`;
   const waking = `<div class="banner" data-waking hidden role="status"><span class="spin" aria-hidden="true"></span>Waking up the server… (can take up to a minute)</div>`;
   const setupFirst = () => `<section class="panel"><div class="empty">${icon("calendar-cog")}<h2>Set up your week first</h2><p class="small">Add your deadlines, day window and timetable, so plans can use your real free time.</p><a class="btn btn-primary" href="#/plan/setup">Set up my week</a></div></section>`;
 
@@ -323,7 +329,9 @@ window.PlanningModule = (SX) => {
         ${b("elm", "ELM down")}${b("waking", "Server waking")}${b("net", "Network error")}${b("push", "Push not delivered")}${b("fresh", "No setup yet")}
         <button class="btn btn-sm" type="button" data-pl="next-day">Simulate next day</button>
         <button class="btn btn-sm" type="button" data-pl="reset">Reset planning demo</button>
-      </div></details>`;
+      </div>
+      <div class="row" style="margin-top:10px"><label class="field" style="max-width:320px"><span class="label">ELM dev token</span><input class="input mono" type="password" autocomplete="off" data-pl-in="elm-token" value="${esc(elmToken())}" placeholder="name:token"></label>
+        <span class="tiny faint">${elmToken() ? "ELM calls go through the server with this token (this tab only)." : "Without a token the page uses rules and templates only."}</span></div></details>`;
   }
 
   // ================= §12 Today =================
@@ -332,11 +340,13 @@ window.PlanningModule = (SX) => {
     const done = W.tasks.filter((t) => t.status === "done").length, next = W.tasks.find((t) => t.status === "planned");
     let primary;
     if (W.submitted && afterSix() && !W.closed) primary = `<div class="tcard-main"><div><div class="label-up">This evening</div><h2>How did today go?</h2><p class="small muted">${done} of ${W.tasks.length} done. Look back on each task in Reflection.</p></div><a class="btn btn-primary" href="#/reflection">${icon("moon-star")}Check in</a></div>`;
-    else if (W.submitted && W.closed) primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Plan closed</h2><p class="small muted">${W.offDay ? "Off day: not counted." : `${done} of ${W.tasks.length} done.`} Tomorrow's plan opens from 18:00.</p></div><a class="btn" href="#/progress">${icon("chart-column")}See progress</a></div>`;
+    else if (W.submitted && W.closed) primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Plan closed</h2><p class="small muted">${W.tasks.length ? `${done} of ${W.tasks.length} done.` : "Rest day."} Tomorrow's plan opens from 18:00.</p></div><a class="btn" href="#/progress">${icon("chart-column")}See progress</a></div>`;
+    else if (W.submitted && !W.tasks.length) primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Rest day</h2><p class="small muted">Enjoy it. Tomorrow's plan opens from 18:00.</p></div><button class="btn" type="button" data-pl="rest-undo">${icon("pencil-line")}Plan today after all</button></div>`;
     else if (W.submitted) primary = `<div class="tcard-main"><div><div class="label-up">Next task</div><h2>${next ? esc(next.text) : "All tasks handled"}</h2><p class="small muted mono">${next ? `${next.time} · ${next.mins} min · ` : ""}${done} of ${W.tasks.length} done</p></div><a class="btn btn-primary" href="#/plan/today/4">${icon("list-checks")}Open plan</a></div>`;
     else primary = `<div class="tcard-main"><div><div class="label-up">Today</div><h2>Plan your day</h2><p class="small muted">${competent() ? "Write your tasks and get light feedback. About 2 minutes." : "Four short steps: check-in, tasks, feedback, plan. About 3 minutes."}</p></div><a class="btn btn-primary" href="#/plan/today/${W.started ? W.step : 1}">${icon("pencil-line")}${W.started ? `Continue (step ${W.step})` : "Plan your day"}</a></div>`;
-    const e4 = SERVER.e4({ elmDown: st.sim.elm });
+    const e4 = st.e4; // E4: fetched after render on the competent path; null = no card (v6 §15)
     const showSug = competent() && e4 && !st.suggestion.skipped && !W.tasks.some((t) => t.link);
+    const targets = (SX.projectTargets && SX.projectTargets(W.date)) || [];
     return `${waking}${todayHead()}
       <div class="today-grid">
         <div class="stack" style="gap:16px">
@@ -350,8 +360,12 @@ window.PlanningModule = (SX) => {
             <div class="row"><button class="btn btn-primary btn-sm" type="button" data-pl="sg-add">${icon("plus")}Add</button>${st.suggestion.editing ? "" : `<button class="btn btn-sm" type="button" data-pl="sg-edit">Edit</button>`}<button class="btn btn-ghost btn-sm" type="button" data-pl="sg-skip">Skip</button></div>
           </div></section>` : ""}
         </div>
-        <section class="panel" aria-labelledby="dw-h"><div class="panel-head"><h2 id="dw-h">Due this week</h2><a class="btn btn-ghost btn-sm" href="#/plan/milestones">Milestones</a></div>
-          <div class="panel-body">${dueList(W.date)}</div></section>
+        <div class="stack" style="gap:16px">
+          <section class="panel" aria-labelledby="dw-h"><div class="panel-head"><h2 id="dw-h">Due this week</h2><a class="btn btn-ghost btn-sm" href="#/plan/milestones">Milestones</a></div>
+            <div class="panel-body">${dueList(W.date)}</div></section>
+          ${targets.length ? `<section class="panel" aria-labelledby="pt-h"><div class="panel-head"><h2 id="pt-h">Project targets</h2><a class="btn btn-ghost btn-sm" href="#/project">Projects</a></div>
+            <div class="panel-body"><ul class="due-list">${targets.map((m) => `<li><span class="due-day mono">${WD[wd(m.date)]}</span><span><b>${esc(m.name)}</b><span class="tiny faint">${esc(m.project)}</span></span></li>`).join("")}</ul></div></section>` : ""}
+        </div>
       </div>
       ${proto()}`;
   }
@@ -360,7 +374,7 @@ window.PlanningModule = (SX) => {
     return `<div class="page-head"><div><h1>${g}</h1><p class="path-line">${fmtLong(W.date)} · ${pathLine()}</p></div></div>`;
   }
   function dueList(date) {
-    const ms = SERVER.dueSoon(date);
+    const ms = SERVER.dueSoon(date).filter((m) => m.status !== "done" && m.status !== "skipped");
     return ms.length ? `<ul class="due-list">${ms.map((m) => { const dl = deadlineById(m.deadline); return `<li><span class="due-day mono">${WD[wd(m.date)]}</span><span><b>${esc(m.name)}</b><span class="tiny faint">${dl ? `${esc(dl.course)} · ${esc(dl.item)}` : ""}</span></span></li>`; }).join("")}</ul>` : `<p class="small faint">No milestones due in the next 7 days.</p>`;
   }
 
@@ -372,53 +386,45 @@ window.PlanningModule = (SX) => {
       : `<a class="btn btn-primary" href="#/plan/today/1">${icon("pencil-line")}Plan today</a>`;
     const tomorrow = afterSix() ? `<button class="btn" type="button" data-pl="plan-tomorrow">${icon("calendar-plus")}Plan tomorrow</button>` : "";
     const upcoming = [...db.setup.deadlines].filter((d) => d.date >= F.today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 3);
-    const thisWeek = db.milestones.filter((m) => m.date >= mondayOf(F.today) && m.date <= addDays(mondayOf(F.today), 6) && m.date >= F.today).length;
+    const thisWeek = db.milestones.filter((m) => m.status === "open" && m.date >= mondayOf(F.today) && m.date <= addDays(mondayOf(F.today), 6) && m.date >= F.today).length;
     const showWeekly = wd(F.today) === 1 && !st.weeklyDismissed;
     return `${waking}${head("Plan")}
-      ${showWeekly ? `<div class="banner info" role="status">${icon("calendar-sync")}<span>Anything new this week? Update your deadlines.</span><a class="btn btn-sm" href="#/plan/setup" data-pl="weekly-go">Update deadlines</a><button class="icon-btn" type="button" data-pl="weekly-x" aria-label="Dismiss">${icon("x")}</button></div>` : ""}
-      <div class="plan-cards">
+      ${showWeekly ? `<div class="banner info" role="status">${icon("calendar-sync")}<span>Anything new this week? Update your deadlines.</span><a class="btn btn-sm" href="#/plan/milestones" data-pl="weekly-go">Update deadlines</a><button class="icon-btn" type="button" data-pl="weekly-x" aria-label="Dismiss">${icon("x")}</button></div>` : ""}
+      <div class="plan-cards two">
         <section class="panel" aria-labelledby="pc1"><div class="panel-head"><h2 id="pc1">Today's plan</h2><span class="sub">${fmtDate(W.date)}</span></div>
-          <div class="panel-body stack-sm"><p class="small muted">${W.submitted ? `Saved with quality ${W.quality}/5. ${W.tasks.filter((t) => t.status === "done").length} of ${W.tasks.length} done.` : W.started ? `In progress: step ${W.step} of 4.` : "Not planned yet."}</p><div class="row">${btn}${tomorrow}</div></div></section>
-        <section class="panel" aria-labelledby="pc2"><div class="panel-head"><h2 id="pc2">Deadlines & milestones</h2></div>
+          <div class="panel-body stack-sm"><p class="small muted">${W.submitted ? (W.quality != null ? `Saved with quality ${W.quality}/5. ` : "Saved. ") + `${W.tasks.filter((t) => t.status === "done").length} of ${W.tasks.length} done.` : W.started ? `In progress: step ${W.step} of 4.` : "Not planned yet."}</p><div class="row">${btn}${tomorrow}</div></div></section>
+        <section class="panel" aria-labelledby="pc2"><div class="panel-head"><h2 id="pc2">Exams & assignments</h2></div>
           <div class="panel-body stack-sm">
-            <ul class="dl-list">${upcoming.map((d) => `<li><span>${esc(d.course)} · ${esc(d.item)}</span><span class="mono small">${fmtDate(d.date)}</span></li>`).join("")}</ul>
+            <ul class="dl-list">${upcoming.map((d) => `<li><span>${tag("neutral", d.kind === "exam" ? "Exam" : "Assignment")} ${esc(d.course)} · ${esc(d.item)}</span><span class="mono small">${fmtDate(d.date)}</span></li>`).join("") || `<li class="small faint">No deadlines yet.</li>`}</ul>
             <a class="btn btn-sm" href="#/plan/milestones">${icon("flag")}${thisWeek} milestone${thisWeek === 1 ? "" : "s"} due this week</a></div></section>
-        <section class="panel" aria-labelledby="pc3" data-tour="plan-setup"><div class="panel-head"><h2 id="pc3">Setup</h2></div>
-          <div class="panel-body stack-sm"><dl class="kv"><dt>Day window</dt><dd class="mono">${db.setup.window.start}–${db.setup.window.end}</dd><dt>Timetable</dt><dd>${db.setup.classes.length} classes a week</dd><dt>Last updated</dt><dd>${esc(db.setup.updated)}</dd></dl>
-            <div><a class="btn btn-sm" href="#/plan/setup">${icon("settings-2")}Update</a></div></div></section>
       </div>${proto()}`;
   }
 
-  // ================= §5 Setup =================
+  // ================= §5 Setup (behind the gear) =================
   function setup() {
-    const S = db.setup;
-    const dlRows = [...S.deadlines].sort((a, b) => a.date.localeCompare(b.date)).map((d) => st.editDeadline === d.id
-      ? `<li class="dl-edit">${deadlineFields(d, "ed")}<div class="row"><button class="btn btn-sm btn-primary" type="button" data-pl="dl-save" data-v="${d.id}">Save</button><button class="btn btn-sm btn-ghost" type="button" data-pl="dl-cancel">Cancel</button></div></li>`
-      : `<li><span><b>${esc(d.course)}</b> · ${esc(d.item)}</span><span class="mono small">${fmtDate(d.date)} · ${d.time}</span><span class="row"><button class="btn btn-sm btn-ghost" type="button" data-pl="dl-edit" data-v="${d.id}">Edit</button><button class="btn btn-sm btn-ghost" type="button" data-pl="dl-del" data-v="${d.id}">Delete</button></span></li>`).join("");
-    const days = [1, 2, 3, 4, 5];
-    return `${waking}${head("Setup", "Deadlines, day window, timetable and busy time. Each part saves on its own.")}
+    const S = db.setup, days = [1, 2, 3, 4, 5], I = db.ics;
+    const stale = I && I.last && I.last < F.today;
+    return `${waking}${head("Setup", "Calendar, day window, study time and busy time. Planning uses them to find your real free time. Each part saves on its own.")}
       <div class="setup-grid">
-      <section class="panel" aria-labelledby="s1"><div class="panel-head"><h2 id="s1">Deadlines</h2></div><div class="panel-body stack-sm" style="gap:14px">
-        <div class="tabs" role="tablist" aria-label="How to add deadlines">${[["fill", "Fill in"], ["paste", "Paste text"]].map(([k, l]) => `<button role="tab" type="button" data-pl="setup-tab" data-v="${k}" aria-selected="${st.setupTab === k}">${l}</button>`).join("")}</div>
-        ${st.readMsg ? `<p class="note" role="status">${icon("info")}<span>${st.readMsg}</span></p>` : ""}
-        ${st.setupTab === "fill" ? `<div class="dl-form">${deadlineFields({ course: "", item: "", date: "", time: "" }, "new")}<button class="btn btn-primary" type="button" data-pl="dl-add">${icon("plus")}Add</button></div>`
-          : `<div class="field"><label for="paste">Paste anything: an email, a course page, your own notes</label><textarea class="textarea" id="paste" rows="4" data-pl-in="paste" placeholder="e.g. cw2 for inf2 moved to thursday 2pm">${esc(st.pasteText || "")}</textarea></div>
-             <div><button class="btn btn-primary" type="button" data-pl="read" ${st.reading ? "disabled" : ""}>${st.reading ? "Reading…" : `${icon("scan-text")}Read it`}</button></div>
-             ${st.preview ? `<div class="preview" aria-label="Found deadlines"><div class="label-up">Found · nothing is saved yet</div>
-               ${st.preview.map((p, k) => `<div class="pv-row ${p.keep ? "" : "removed"}">${deadlineFields(p, "pv" + k)}<button class="btn btn-sm" type="button" data-pl="pv-toggle" data-v="${k}" aria-pressed="${p.keep}">${p.keep ? "Remove" : "Keep"}</button></div>`).join("")}
-               <div class="row"><button class="btn btn-primary btn-sm" type="button" data-pl="save-all" ${st.preview.some((p) => p.keep) ? "" : "disabled"}>${icon("check")}Save all</button><span class="tiny faint">${st.preview.filter((p) => p.keep).length} to save</span></div></div>` : ""}`}
-        <ul class="dl-list saved">${dlRows}</ul>
+      <section class="panel span2" aria-labelledby="s3"><div class="panel-head"><h2 id="s3">Calendar</h2><span class="sub">Outlook sync is coming later.</span></div><div class="panel-body stack-sm" style="gap:14px">
+        ${I ? `<p class="small" role="status">${icon("calendar-check")} <b>${I.events.length} busy slots</b> from your calendar file, <span class="mono">${fmtDate(I.first)} – ${fmtDate(I.last)}</span>. Titles stay on this device; planning uses the times only.
+            <button class="linkish" type="button" data-pl="ics-del">Remove calendar file</button></p>
+            ${stale ? `<p class="note">${icon("info")}<span>Your calendar file ends on ${fmtDate(I.last)}. Import a newer one.</span></p>` : ""}`
+          : `<p class="small muted">Export your timetable from Outlook (or any calendar) as an <b>.ics</b> file and upload it. Each busy slot appears on its real date.</p>`}
+        ${I && !S.classes.length && !st.addClass ? "" : `<div class="tt-grid">${days.map((d) => `<div class="tt-day"><div class="tt-h">${WD[d]}</div>${S.classes.filter((c) => c.day === d).sort((a, b) => a.start.localeCompare(b.start)).map((c) => `<div class="tt-class"><span class="mono tiny">${c.start}–${c.end}</span><span class="small">${esc(c.name)}</span><button class="icon-btn" type="button" data-pl="cls-del" data-v="${c.id}" aria-label="Remove ${esc(c.name)} on ${WDL[d]}">${icon("x")}</button></div>`).join("") || `<span class="tiny faint">No classes</span>`}</div>`).join("")}</div>`}
+        ${st.addClass ? `<div class="cls-form"><label class="field"><span class="label">Day</span><select class="select" data-pl-in="cls-day">${days.map((d) => `<option value="${d}">${WDL[d]}</option>`).join("")}</select></label><label class="field"><span class="label">Start</span><input class="input mono" type="time" data-pl-in="cls-start" value="10:00"></label><label class="field"><span class="label">End</span><input class="input mono" type="time" data-pl-in="cls-end" value="11:00"></label><label class="field"><span class="label">Name</span><input class="input" data-pl-in="cls-name" placeholder="e.g. INF2 lecture"></label><button class="btn btn-primary btn-sm" type="button" data-pl="cls-add">Add</button></div>` : ""}
+        <div class="row"><label class="btn btn-sm btn-primary file-btn">${icon("upload")}Upload .ics<input type="file" accept=".ics,text/calendar" data-pl-in="ics" class="sr-only"></label>
+          <button class="btn btn-sm" type="button" data-pl="cls-open">${icon("plus")}Add a weekly class</button>
+          <span style="flex:1"></span><button class="btn btn-sm" type="button" data-pl="save-tt">Save timetable</button></div>
       </div></section>
 
       <section class="panel" aria-labelledby="s2"><div class="panel-head"><h2 id="s2">Day window</h2></div><div class="panel-body stack-sm">${windowControl("setup")}</div></section>
 
-      <section class="panel span2" aria-labelledby="s3"><div class="panel-head"><h2 id="s3">Timetable</h2><span class="sub">Outlook sync is coming later.</span></div><div class="panel-body stack-sm" style="gap:14px">
-        <div class="tt-grid">${days.map((d) => `<div class="tt-day"><div class="tt-h">${WD[d]}</div>${S.classes.filter((c) => c.day === d).sort((a, b) => a.start.localeCompare(b.start)).map((c) => `<div class="tt-class"><span class="mono tiny">${c.start}–${c.end}</span><span class="small">${esc(c.name)}</span><button class="icon-btn" type="button" data-pl="cls-del" data-v="${c.id}" aria-label="Remove ${esc(c.name)} on ${WDL[d]}">${icon("x")}</button></div>`).join("") || `<span class="tiny faint">No classes</span>`}</div>`).join("")}</div>
-        ${st.addClass ? `<div class="cls-form"><label class="field"><span class="label">Day</span><select class="select" data-pl-in="cls-day">${days.map((d) => `<option value="${d}">${WDL[d]}</option>`).join("")}</select></label><label class="field"><span class="label">Start</span><input class="input mono" type="time" data-pl-in="cls-start" value="10:00"></label><label class="field"><span class="label">End</span><input class="input mono" type="time" data-pl-in="cls-end" value="11:00"></label><label class="field"><span class="label">Name</span><input class="input" data-pl-in="cls-name" placeholder="e.g. INF2 lecture"></label><button class="btn btn-primary btn-sm" type="button" data-pl="cls-add">Add</button></div>` : ""}
-        <div class="row"><button class="btn btn-sm" type="button" data-pl="cls-open">${icon("plus")}Add class</button>
-          <label class="btn btn-sm file-btn">${icon("upload")}Upload .ics <span class="ptag neutral">Demo</span><input type="file" accept=".ics,text/calendar" data-pl-in="ics" class="sr-only"></label>
-          <span style="flex:1"></span><button class="btn btn-sm btn-primary" type="button" data-pl="save-tt">Save timetable</button></div>
-      </div></section>
+      <section class="panel" aria-labelledby="s5"><div class="panel-head"><h2 id="s5">Study time</h2></div><div class="panel-body stack-sm">
+        <div class="win-row"><label class="field"><span class="label">Hours per week outside classes</span><input class="input mono" type="number" min="1" max="70" step="1" data-pl-in="study-week" value="${S.weeklyHours}"></label>
+          <label class="field"><span class="label">Most hours in one day</span><input class="input mono" type="number" min="1" max="12" step="0.5" data-pl-in="study-day" value="${S.dailyCapMin / 60}"></label></div>
+        <p class="tiny faint">Milestone dates and warnings use this, capped by your real free time.</p>
+        <div><button class="btn btn-sm btn-primary" type="button" data-pl="save-study">Save study time</button></div></div></section>
 
       <section class="panel span2" aria-labelledby="s4"><div class="panel-head"><h2 id="s4">Personal commitments</h2></div><div class="panel-body stack-sm" style="gap:12px">
         <p class="tiny faint">${icon("shield")} Only "Busy" is stored on our server. The label stays on this device.</p>
@@ -445,53 +451,118 @@ window.PlanningModule = (SX) => {
       <div><button class="btn btn-sm btn-primary" type="button" data-pl="save-win" data-v="${where}" ${bad ? "disabled" : ""}>Save day window</button></div>`;
   }
 
-  // ================= §6 Backward planning =================
+  // ================= v6 §6–§8 Exams & assignments =================
+  const REDATE_REASONS = ["Took longer than planned", "Something came up", "Unclear what to do", "Other"];
+  const SIZES = [["s", "S"], ["m", "M"], ["l", "L"]], CONF = [["low", "Low"], ["ok", "OK"], ["high", "High"]];
+  const SUBTYPES = [["code", "Code"], ["written", "Written"], ["maths", "Maths"]];
+  function msState() {
+    const list = db.setup.deadlines.filter((d) => d.kind === st.msTab).sort((a, b) => a.date.localeCompare(b.date));
+    const dl = list.find((d) => d.id === st.msDeadline) || list[0] || null;
+    if (dl && (!st.msEdit || st.msEdit.deadline !== dl.id)) {
+      st.msEdit = { deadline: dl.id, rows: db.milestones.filter((m) => m.deadline === dl.id).map((m) => ({ ...m })),
+        topics: (dl.topics || []).map((t) => ({ ...t })), parts: (dl.parts || []).map((p) => ({ ...p })), subtype: dl.subtype || "code", papers: dl.papers || 0, paperMin: dl.paperMin || 120, paste: "", notes: [] };
+      st.redate = st.skip = null;
+    }
+    return { list, dl };
+  }
   function milestonesPage() {
-    if (st.sim.fresh) return `${waking}${head("Milestones")}${setupFirst()}${proto()}`;
-    const dl = deadlineById(st.msDeadline) || db.setup.deadlines[0];
-    if (!st.msEdit || st.msEdit.deadline !== dl.id) st.msEdit = { deadline: dl.id, rows: db.milestones.filter((m) => m.deadline === dl.id).map((m) => ({ ...m })) };
-    const rows = st.msEdit.rows;
-    const qs = st.sim.elm ? F.e2Generic : F.e2[dl.id] || F.e2Generic;
-    return `${waking}${head("Milestones", "Work backwards from each deadline. You write the milestones; nothing is filled in for you.")}
-      <div class="chips-row" role="group" aria-label="Deadline">${db.setup.deadlines.map((d) => `<button type="button" class="qchip" data-pl="ms-dl" data-v="${d.id}" aria-pressed="${d.id === dl.id}">${esc(d.course)} · ${esc(d.item)} <span class="mono">${fmtDate(d.date)}</span></button>`).join("")}</div>
-      <div class="ms-layout">
-        <section class="panel" aria-labelledby="ms-h"><div class="panel-head"><h2 id="ms-h">${esc(dl.course)} · ${esc(dl.item)}</h2><span class="sub mono">due ${fmtDate(dl.date)}, ${dl.time}</span></div>
-          <div class="panel-body stack-sm" style="gap:14px">
-            <div class="table-wrap"><table class="data ms-table"><thead><tr><th>Name</th><th>Target date</th><th>Est. hours</th><th>Check</th><th><span class="sr-only">Actions</span></th></tr></thead>
-              <tbody>${rows.map((m, k) => msRow(m, k)).join("") || `<tr><td colspan="5" class="small faint">No milestones yet. Add the first one below.</td></tr>`}</tbody></table></div>
-            <div class="row"><button class="btn btn-sm" type="button" data-pl="ms-add">${icon("plus")}Add milestone</button><span style="flex:1"></span><button class="btn btn-primary btn-sm" type="button" data-pl="ms-save">${icon("check")}Save milestones</button></div>
-          </div></section>
+    if (st.sim.fresh) return `${waking}${head("Exams & assignments")}${setupFirst()}${proto()}`;
+    const { list, dl } = msState(), E = st.msEdit, exam = st.msTab === "exam";
+    const qs = (dl && st.e2[dl.id]) || F.e2Generic;
+    return `${waking}${head("Exams & assignments", "Socratix sets out the stages and places the dates in your real study time. You decide: rename, re-date, add or skip.")}
+      <div class="tabs" role="tablist" aria-label="Deadline type">${[["exam", "Exams"], ["assignment", "Assignments"]].map(([k, l]) => `<button role="tab" type="button" data-pl="ms-tab" data-v="${k}" aria-selected="${st.msTab === k}">${l}</button>`).join("")}</div>
+      <div class="chips-row" role="group" aria-label="${exam ? "Exams" : "Assignments"}">${list.map((d) => `<button type="button" class="qchip" data-pl="ms-dl" data-v="${d.id}" aria-pressed="${dl && d.id === dl.id}">${esc(d.course)} · ${esc(d.item)} <span class="mono">${fmtDate(d.date)}</span></button>`).join("")}
+        <button type="button" class="qchip" data-pl="ms-add" aria-expanded="${st.msAdd}">${icon("plus")}Add ${exam ? "an exam" : "an assignment"}</button></div>
+      ${st.msAdd ? addDeadlinePanel(exam) : ""}
+      ${dl ? `<div class="ms-layout">
+        <div class="stack" style="gap:16px">
+          <section class="panel" aria-labelledby="in-h"><div class="panel-head"><h2 id="in-h">${esc(dl.course)} · ${esc(dl.item)}</h2><span class="sub mono">due ${fmtDate(dl.date)}, ${dl.time}</span></div>
+            <div class="panel-body stack-sm" style="gap:14px">${exam ? examInputs(E) : assignInputs(E)}
+              <div class="row"><button class="btn btn-primary btn-sm" type="button" data-pl="ms-build">${icon("wand-sparkles")}${E.rows.length ? "Rebuild stages" : "Build stages"}</button>
+                <span class="tiny faint">${E.rows.length ? "Rebuilding replaces the dates and hours below." : "Stages come from the template; dates come from your free time."}</span>
+                <span style="flex:1"></span><button class="btn btn-sm btn-ghost" type="button" data-pl="dl-del" data-v="${dl.id}">${icon("trash-2")}Delete deadline</button></div></div></section>
+          <section class="panel" aria-labelledby="ms-h"><div class="panel-head"><h2 id="ms-h">Milestones</h2><span class="sub">${exam ? "Test yourself, space it, simulate it" : "Understand, build small, check early"}</span></div>
+            <div class="panel-body stack-sm" style="gap:14px">
+              ${ST.diffDays(F.today, dl.date) < CFG.MILESTONES_OPTIONAL_UNDER_DAYS ? `<p class="note">${icon("info")}<span>Under 7 days away: milestones are optional${exam ? ", so this is the short version" : ""}.</span></p>` : ""}
+              ${E.notes.map((n) => `<p class="note">${icon("info")}<span>${esc(n.text)}</span></p>`).join("")}
+              <div class="table-wrap"><table class="data ms-table"><thead><tr><th>Stage</th><th>Target date</th><th>Est. hours</th><th>Progress</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>${E.rows.map((m, k) => msRow(m, k)).join("") || `<tr><td colspan="5" class="small faint">No milestones yet. ${exam ? "Add topics" : "Add parts"}, then press <b>Build stages</b>.</td></tr>`}</tbody></table></div>
+              <div class="row"><button class="btn btn-sm" type="button" data-pl="ms-row-add">${icon("plus")}Add milestone</button><span style="flex:1"></span><button class="btn btn-primary btn-sm" type="button" data-pl="ms-save">${icon("check")}Save milestones</button></div>
+            </div></section>
+        </div>
         <div class="stack" style="gap:16px">
           <section class="think" aria-labelledby="th-h"><div class="label-up" id="th-h">Think about</div><ol>${qs.map((q) => `<li>${esc(q)}</li>`).join("")}</ol></section>
           <div data-ms-rules>${msRules(dl)}</div>
         </div>
-      </div>${proto()}`;
+      </div>` : `<section class="panel"><div class="empty">${icon("flag")}<h2>No ${exam ? "exams" : "assignments"} yet</h2><p class="small">Add one to get dated stages that fit your free time.</p><button class="btn btn-primary" type="button" data-pl="ms-add">${icon("plus")}Add ${exam ? "an exam" : "an assignment"}</button></div></section>`}
+      ${proto()}`;
+  }
+  function addDeadlinePanel(exam) {
+    return `<section class="panel" aria-labelledby="add-h"><div class="panel-head"><h2 id="add-h">New ${exam ? "exam" : "assignment"}</h2></div><div class="panel-body stack-sm" style="gap:14px">
+      <div class="tabs" role="tablist" aria-label="How to add">${[["fill", "Fill in"], ["paste", "Paste text"]].map(([k, l]) => `<button role="tab" type="button" data-pl="setup-tab" data-v="${k}" aria-selected="${st.setupTab === k}">${l}</button>`).join("")}</div>
+      ${st.readMsg ? `<p class="note" role="status">${icon("info")}<span>${st.readMsg}</span></p>` : ""}
+      ${st.setupTab === "fill" ? `<div class="dl-form">${deadlineFields({ course: "", item: "", date: "", time: "" }, "new")}${exam ? "" : `<label class="field"><span class="label">Type</span><select class="select" data-pl-in="new-subtype">${SUBTYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>`}<button class="btn btn-primary" type="button" data-pl="dl-add">${icon("plus")}Add</button></div>`
+        : `<div class="field"><label for="paste">Paste anything: an email, a course page, your own notes</label><textarea class="textarea" id="paste" rows="4" data-pl-in="paste" placeholder="e.g. cw2 for inf2 moved to thursday 2pm">${esc(st.pasteText || "")}</textarea></div>
+           <div><button class="btn btn-primary" type="button" data-pl="read" ${st.reading ? "disabled" : ""}>${st.reading ? "Reading…" : `${icon("scan-text")}Read it`}</button></div>
+           ${st.preview ? `<div class="preview" aria-label="Found deadlines"><div class="label-up">Found · nothing is saved yet</div>
+             ${st.preview.map((p, k) => `<div class="pv-row ${p.keep ? "" : "removed"}">${deadlineFields(p, "pv" + k)}<span class="ptag neutral">${p.kind === "exam" ? "Exam" : "Assignment"}</span><button class="btn btn-sm" type="button" data-pl="pv-toggle" data-v="${k}" aria-pressed="${p.keep}">${p.keep ? "Remove" : "Keep"}</button></div>`).join("")}
+             <div class="row"><button class="btn btn-primary btn-sm" type="button" data-pl="save-all" ${st.preview.some((p) => p.keep) ? "" : "disabled"}>${icon("check")}Save all</button><span class="tiny faint">${st.preview.filter((p) => p.keep).length} to save</span></div></div>` : ""}`}
+    </div></section>`;
+  }
+  const seg = (name, k, opts, cur) => `<div class="seg seg-sm" role="group" aria-label="${name}">${opts.map(([v, l]) => `<button type="button" data-pl="ms-set" data-v="${k}|${v}" aria-pressed="${cur === v}">${l}</button>`).join("")}</div>`;
+  function pasteBox(label, ph) {
+    return `<div class="field"><label for="ms-paste">${label}</label><textarea class="textarea" id="ms-paste" rows="3" data-pl-in="ms-paste" placeholder="${ph}">${esc(st.msEdit.paste)}</textarea></div>
+      <div class="row"><button class="btn btn-sm" type="button" data-pl="ms-find" ${st.finding ? "disabled" : ""}>${st.finding ? "Reading…" : `${icon("scan-text")}Find them`}</button><span class="tiny faint">${icon("shield")} This text is sent to ELM to find the list. You check it before anything is used.</span></div>`;
+  }
+  function examInputs(E) {
+    return `<div class="label-up">Topics and confidence</div>
+      <ul class="in-list">${E.topics.map((t, k) => `<li><input class="input" aria-label="Topic" data-ms-topic="${k}" value="${esc(t.name)}">${seg("Confidence", `topic:${k}`, CONF, t.confidence)}<button class="icon-btn" type="button" data-pl="ms-topic-del" data-v="${k}" aria-label="Remove topic">${icon("x")}</button></li>`).join("") || `<li class="small faint">No topics yet.</li>`}</ul>
+      <div><button class="btn btn-sm btn-ghost" type="button" data-pl="ms-topic-add">${icon("plus")}Add topic</button></div>
+      ${pasteBox("Or paste the syllabus or topic list", "e.g. Week 1 matrices, week 2 vectors …")}
+      <div class="win-row"><label class="field"><span class="label">Past papers available</span><input class="input mono" type="number" min="0" max="20" data-ms-num="papers" value="${E.papers}"></label>
+        <label class="field"><span class="label">Paper length (minutes)</span><input class="input mono" type="number" min="30" max="240" step="10" data-ms-num="paperMin" value="${E.paperMin}"></label></div>`;
+  }
+  function assignInputs(E) {
+    return `<div class="label-up">Type</div>${seg("Type", "subtype", SUBTYPES, E.subtype)}
+      <div class="label-up">Parts and size</div>
+      <ul class="in-list">${E.parts.map((p, k) => `<li><input class="input" aria-label="Part" data-ms-part="${k}" value="${esc(p.name)}">${seg("Size", `part:${k}`, SIZES, p.size)}<button class="icon-btn" type="button" data-pl="ms-part-del" data-v="${k}" aria-label="Remove part">${icon("x")}</button></li>`).join("") || `<li class="small faint">No parts yet.</li>`}</ul>
+      <div class="row"><button class="btn btn-sm btn-ghost" type="button" data-pl="ms-part-add">${icon("plus")}Add part</button><span class="tiny faint">Size: S about 1 h, M about 3 h, L about 6 h.</span></div>
+      ${pasteBox("Or paste the brief", "e.g. Task 1: parser … Task 2: report …")}`;
   }
   function msRow(m, k) {
-    const overdue = m.date && m.date < F.today;
-    const cls = SERVER.classify(m.name), over = st.msTags[m.id];
-    const t = over ? tag("neutral", "Your call") : cls === "pass" ? tag("ok", "Looks good") : tag("sug", "Suggestion");
-    return `<tr data-ms="${k}">
-      <td><input class="input" aria-label="Milestone name" data-ms-in="${k}" data-f="name" value="${esc(m.name)}" placeholder="e.g. Lab 3 submitted">${!over && cls !== "pass" ? `<div class="tiny faint ms-note">Say what "done" means: a number, a name or a result. <button class="linkish" type="button" data-pl="ms-own" data-v="${m.id}">This is specific to me</button></div>` : ""}</td>
-      <td><input class="input mono" type="date" aria-label="Target date" data-ms-in="${k}" data-f="date" value="${m.date}">${overdue ? `<div class="row" style="margin-top:4px">${tag("neutral", "Overdue")}<button class="linkish" type="button" data-pl="ms-redate" data-v="${k}">Re-date</button></div>` : ""}</td>
+    const overdue = m.status === "open" && m.date && m.date < F.today;
+    const done = m.status === "done", skipped = m.status === "skipped";
+    const reached = m.status === "open" && m.hours > 0 && m.doneHours >= m.hours;
+    let dateCell;
+    if (st.redate && st.redate.k === k) dateCell = `<div class="stack-sm"><input class="input mono" type="date" aria-label="New date" data-pl-in="redate-date" value="${m.date}"><div class="tchips" role="group" aria-label="Reason">${REDATE_REASONS.map((r) => `<button type="button" class="tchip" data-pl="redate-reason" data-v="${r}" aria-pressed="${st.redate.reason === r}">${r}</button>`).join("")}</div>
+        <div class="row"><button class="btn btn-sm btn-primary" type="button" data-pl="redate-save" data-v="${k}" ${st.redate.reason ? "" : "disabled"}>Re-date</button><button class="btn btn-sm btn-ghost" type="button" data-pl="redate-x">Cancel</button></div></div>`;
+    else if (m.saved) dateCell = `<span class="mono small">${fmtDate(m.date)}</span>${overdue ? ` ${tag("neutral", "Overdue")}` : ""}${!done && !skipped ? ` <button class="linkish" type="button" data-pl="redate" data-v="${k}">Re-date</button>` : ""}`;
+    else dateCell = `<input class="input mono" type="date" aria-label="Target date" data-ms-in="${k}" data-f="date" value="${m.date}">`;
+    return `<tr data-ms="${k}" class="${done || skipped ? "is-done" : ""}">
+      <td><input class="input" aria-label="Stage name" data-ms-in="${k}" data-f="name" value="${esc(m.name)}"><div class="tiny faint ms-note">${esc(m.done || "")}</div>
+        ${skipped ? `<div class="tiny faint">Skipped: ${esc(m.skipReason || "")}</div>` : st.skip && st.skip.k === k ? `<div class="row nowrap" style="margin-top:4px"><input class="input" aria-label="One-word reason" data-pl-in="skip-reason" placeholder="Reason, one word"><button class="btn btn-sm" type="button" data-pl="skip-save" data-v="${k}">Skip</button></div>` : ""}</td>
+      <td>${dateCell}</td>
       <td><input class="input mono hrs" type="number" min="0" step="0.5" aria-label="Estimated hours" data-ms-in="${k}" data-f="hours" value="${m.hours}"></td>
-      <td data-ms-tag="${k}">${t}</td>
-      <td><button class="icon-btn" type="button" data-pl="ms-del" data-v="${k}" aria-label="Delete milestone">${icon("trash-2")}</button></td></tr>`;
+      <td><span class="mono small">${r1(m.doneHours || 0)} / ${m.hours} h</span>${reached ? `<div class="tiny">${tag("ok", "Mark done?")}</div>` : ""}</td>
+      <td class="row nowrap"><button class="tick sm" type="button" data-pl="ms-done" data-v="${k}" aria-pressed="${done}" aria-label="${done ? "Done" : "Mark done"}: ${esc(m.name)}">${done ? icon("check") : ""}</button>
+        ${!done && !skipped && !(st.skip && st.skip.k === k) ? `<button class="btn btn-sm btn-ghost" type="button" data-pl="skip" data-v="${k}">Skip</button>` : ""}
+        ${m.saved ? "" : `<button class="icon-btn" type="button" data-pl="ms-del" data-v="${k}" aria-label="Delete milestone">${icon("trash-2")}</button>`}</td></tr>`;
   }
+  const r1 = (x) => Math.round(x * 10) / 10;
   function msRules(dl) {
-    const R = SERVER.milestoneRules(st.msEdit.rows, dl);
-    const max = Math.max(1, ...R.weeks.map((w) => Math.max(w.planned, w.free)));
+    const R = msWarnings({ [dl.id]: st.msEdit.rows });
+    const max = Math.max(1, ...R.weeks.map((w) => Math.max(w.planned, w.study)));
     const panels = [];
-    if (!R.buffer) panels.push(`<div class="rule-panel">${tag("warn", "Buffer")}<span>Leave at least 2 days before the deadline.</span></div>`);
-    if (!R.order) panels.push(`<div class="rule-panel">${tag("warn", "Order")}<span>Milestones are out of order.</span><button class="btn btn-sm" type="button" data-pl="ms-sort">Sort by date</button></div>`);
-    R.cramming.forEach((c) => panels.push(`<div class="rule-panel">${tag("warn", "Cramming")}<span>Week of ${fmtDate(c.week).slice(4)}: ${c.planned} h planned, ${c.free} h free. Spread it out?</span></div>`));
-    return `${panels.join("") || `<div class="rule-panel ok">${tag("ok", "Looks good")}<span>Dates leave room before the deadline and every week fits your free time.</span></div>`}
-      <section class="panel weeks" aria-labelledby="wk-h"><div class="panel-head"><h3 id="wk-h">Hours per week</h3><span class="sub">planned vs free</span></div>
-        <div class="panel-body"><ul class="wk-bars">${R.weeks.map((w) => `<li title="Week of ${fmtDate(w.week).slice(4)}: ${w.planned} h planned, ${w.free} h free">
+    if (R.buffer.some((b) => b.deadline === dl.id)) panels.push(`<div class="rule-panel">${tag("warn", "Buffer")}<span>Leave at least 2 days before the deadline. Name the step before submitting, e.g. "Final draft checked".</span></div>`);
+    R.cramming.forEach((c) => panels.push(`<div class="rule-panel">${tag("warn", "Cramming")}<span>Week of ${fmtDate(c.week).slice(4)}: ${c.planned} h planned, ${c.study} h of study time. Spread it out?</span></div>`));
+    R.atRisk.forEach((x) => panels.push(`<div class="rule-panel">${tag("warn", "At risk")}<span>Behind on "${esc(x.name)}": about ${x.left} h left, ${x.free} h before ${WD[wd(x.date)]}. Plan time or re-date?</span></div>`));
+    return `${panels.join("") || `<div class="rule-panel ok">${tag("ok", "Looks good")}<span>Dates leave room before the deadline and every week fits your study time.</span></div>`}
+      <section class="panel weeks" aria-labelledby="wk-h"><div class="panel-head"><h3 id="wk-h">Hours per week</h3><span class="sub">planned vs study time</span></div>
+        <div class="panel-body"><ul class="wk-bars">${R.weeks.map((w) => `<li title="Week of ${fmtDate(w.week).slice(4)}: ${w.planned} h planned, ${w.study} h of study time">
           <span class="wk-l mono small">${fmtDate(w.week).slice(4)}</span>
-          <span class="wk-track"><span class="wk-fill ${w.planned > w.free ? "over" : ""}" style="width:${(w.planned / max) * 100}%"></span><span class="wk-cap" style="left:${(w.free / max) * 100}%" aria-hidden="true"></span></span>
-          <span class="wk-v small"><b>${w.planned} h</b> <span class="faint">/ ${w.free} h free</span>${w.planned > w.free ? ` ${tag("warn", "Over")}` : ""}</span></li>`).join("")}</ul>
-          <p class="tiny faint">Bar: hours your milestones need that week (spread evenly up to each target date). Line: your free hours from the day window, timetable and busy time.</p></div></section>`;
+          <span class="wk-track"><span class="wk-fill ${w.planned > w.study ? "over" : ""}" style="width:${(w.planned / max) * 100}%"></span><span class="wk-cap" style="left:${(w.study / max) * 100}%" aria-hidden="true"></span></span>
+          <span class="wk-v small"><b>${w.planned} h</b> <span class="faint">/ ${w.study} h</span>${w.planned > w.study ? ` ${tag("warn", "Over")}` : ""}</span></li>`).join("")}</ul>
+          <p class="tiny faint">Bar: milestone hours that week, all deadlines (spread over your study time up to each date). Line: your study time (weekly hours, capped by real free time from your calendar).</p></div></section>`;
   }
 
   // ================= §7–§10 daily wizard =================
@@ -502,21 +573,46 @@ window.PlanningModule = (SX) => {
   function wizard(n) {
     if (st.sim.fresh) return `${waking}${head("Plan today")}${setupFirst()}${proto()}`;
     if (!SX.touring) { W.started = true; W.step = n; saveDraft(); }
-    const body = n === 1 ? step1() : n === 2 ? step2() : n === 3 ? step3() : step4();
+    const body = !W.restAsked && !W.submitted && !SX.touring ? restCard() : n === 1 ? step1() : n === 2 ? step2() : n === 3 ? step3() : step4();
     return `${waking}${head(W.date === F.today ? "Plan today" : `Plan ${fmtDate(W.date)}`)}${stepper(n)}<div class="wiz" data-step="${n}">${body}</div>${proto()}`;
   }
   const stepLabel = (n, t, right = "") => `<div class="step-label"><span class="label-up">Step ${n} of 4 · ${t}</span>${right ? `<span class="small muted">${right}</span>` : ""}</div>`;
 
+  // Session decision: ask about a rest day before planning. A rest day isn't scored and isn't a miss, and the UI never says so.
+  function restCard() {
+    const P = W.restPlan;
+    return `<div class="step-label"><span class="label-up">Before you start</span></div>
+      ${slotStrip()}
+      <section class="panel"><div class="panel-body stack-sm" style="gap:14px">
+        <h2 class="q-l" id="rest-q">Do you have a rest day today?</h2>
+        ${!P ? `<div class="row" role="group" aria-labelledby="rest-q"><button class="btn btn-primary" type="button" data-pl="rest-yes" ${W.restLoading ? "disabled" : ""}>${W.restLoading ? "One moment…" : "Yes"}</button><button class="btn" type="button" data-pl="rest-no">No</button></div>`
+          : `<p class="small muted">Here is a light plan, if you'd like one.</p>
+            ${P.length ? `<div class="checklist">${P.map((t) => `<div class="crow"><span class="mono small ct-time">${t.time}</span><span class="ct-text"><span class="ct-name">${esc(t.text)}</span></span><span class="mono tiny faint">${t.mins} min</span></div>`).join("")}</div>` : `<p class="small faint">Nothing to suggest today.</p>`}
+            <div class="row">${P.length ? `<button class="btn btn-primary btn-sm" type="button" data-pl="rest-use">Use this plan</button><button class="btn btn-sm" type="button" data-pl="rest-edit">Edit</button>` : ""}<button class="btn btn-sm btn-ghost" type="button" data-pl="rest-none">No plan today</button></div>`}
+      </div></section>`;
+  }
+  function restPlanRules() {
+    // fallback: one 20-minute task for the nearest open milestone, in the first free slot after now
+    const m = db.milestones.filter((x) => x.status === "open" && x.date >= W.date && x.hours > 0).sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (!m) return [];
+    const dl = deadlineById(m.deadline), now = W.date === F.today ? toMin(st.now) : 0;
+    const slot = SERVER.slots(W.date).find((x) => x.free && Math.max(x.start, now) + 20 <= x.end);
+    return slot ? [{ text: `${m.name} (${dl ? dl.course : ""}) for 20 min`, time: fromMin(Math.ceil(Math.max(slot.start, now) / 5) * 5), mins: 20, milestoneId: m.id }] : [];
+  }
+  function restWeekCount() { return db.history.filter((h) => h.kind === "rest" && mondayOf(h.date) === mondayOf(W.date) && h.date !== W.date).length; }
+
   function step1() {
     const ex = W.extracted;
+    const targets = ((SX.projectTargets && SX.projectTargets(W.date)) || []).map((m) => `<b>${esc(m.name)}</b> <span class="faint">(${WD[wd(m.date)]}, project)</span>`);
     return `${stepLabel(1, "Today's check-in", "About 20 seconds")}
+      ${slotStrip()}
       <section class="panel"><div class="panel-body stack" style="gap:22px">
         <div class="q"><label for="q1" class="q-l"><span class="qn">1</span>Anything new due or changed?</label>
           <div class="row nowrap"><input class="input" id="q1" data-pl-in="q1" value="${esc(W.q1)}" placeholder="e.g. cw2 for inf2 moved to thursday 2pm"><button class="btn" type="button" data-pl="q1-read" ${W.reading ? "disabled" : ""}>${W.reading ? "Reading…" : "Read it"}</button></div>
           ${ex && ex.found && !W.extractEdit ? `<div class="found" role="status"><span class="label-up">Found</span><span class="mono">${esc(ex.items[0].course)} · ${esc(ex.items[0].item)} · ${fmtDate(ex.items[0].date)}, ${ex.items[0].time}</span>
             <span class="row">${W.extractSaved ? `<span class="ptag ok">${icon("check")}Saved</span>` : `<button class="btn btn-sm btn-primary" type="button" data-pl="q1-save">Save</button><button class="btn btn-sm" type="button" data-pl="q1-edit">Edit</button>`}</span></div>` : ""}
           ${(ex && !ex.found) || W.extractEdit ? `<div class="found edit">${ex && !ex.found ? `<p class="small muted">Couldn't read that. Fill it in instead.</p>` : ""}${deadlineFields(ex && ex.found ? ex.items[0] : { course: "", item: "", date: "", time: "" }, "q1")}<div><button class="btn btn-sm btn-primary" type="button" data-pl="q1-save-form">Save</button></div></div>` : ""}
-          <div class="due-inline small"><span class="faint">Due this week:</span> ${SERVER.dueSoon(W.date).map((m) => `<b>${esc(m.name)}</b> <span class="faint">(${WD[wd(m.date)]})</span>`).join(" · ") || "nothing"}</div>
+          <div class="due-inline small"><span class="faint">Due this week:</span> ${[...SERVER.dueSoon(W.date).filter((m) => m.status === "open").map((m) => `<b>${esc(m.name)}</b> <span class="faint">(${WD[wd(m.date)]})</span>`), ...targets].join(" · ") || "nothing"}</div>
         </div>
         <div class="q"><label for="q2" class="q-l"><span class="qn">2</span>Any extra busy time today?</label>
           <input class="input" id="q2" data-pl-in="q2" value="${esc(W.busyText)}" placeholder="15:00–16:00 gym" aria-describedby="q2h">
@@ -529,9 +625,22 @@ window.PlanningModule = (SX) => {
   }
 
   function slotStrip() {
-    const sl = SERVER.slots(W.date, extraBusy());
-    return `<div class="slots"><span class="small">Your day: <span class="mono">${db.setup.window.start}–${db.setup.window.end}</span>. Free slots:</span>
-      ${sl.map((s) => `<span class="slot ${s.free ? "free" : "busy"}">${fromMin(s.start)}–${fromMin(s.end)}${s.free ? "" : ` ${esc(s.label === "busy" ? "busy" : `${s.label} · busy`)}`}</span>`).join("")}</div>`;
+    const sl = SERVER.slots(W.date, extraBusy()), I = db.ics;
+    const stale = I && I.last && I.last < W.date ? `<p class="note">${icon("info")}<span>Your calendar file ends on ${fmtDate(I.last)}. <a href="#/plan/setup">Import a newer one</a>.</span></p>` : "";
+    const none = !I && !db.setup.classes.length ? `<p class="note">${icon("info")}<span>No timetable yet. <a href="#/plan/setup">Upload your .ics</a> so your classes show here.</span></p>` : "";
+    return `${stale}${none}<div class="slots"><span class="small">Your day, <b>${fmtDate(W.date)}</b>: <span class="mono">${db.setup.window.start}–${db.setup.window.end}</span>. Free slots:</span>
+      ${sl.map((s) => `<span class="slot ${s.free ? "free" : "busy"}">${fromMin(s.start)}–${fromMin(s.end)}${s.free ? "" : ` ${esc(s.label === "busy" ? "busy" : s.label === "tentative" ? "tentative" : `${s.label} · busy`)}`}</span>`).join("")}</div>`;
+  }
+  // v6 §8.4: the next open stage of each deadline becomes a suggested task (rules only, no ELM)
+  function planTargets() {
+    const now = W.date === F.today ? toMin(st.now) : 0, taken = new Set(W.tasks.map((t) => t.milestoneId).filter(Boolean));
+    return db.setup.deadlines.filter((d) => d.date >= W.date).map((d) => {
+      const m = db.milestones.filter((x) => x.deadline === d.id && x.status === "open" && x.hours > 0 && x.date >= W.date).sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (!m || taken.has(m.id) || st.fromPlanDone[W.date + m.id]) return null;
+      const mins = Math.max(25, Math.min(45, Math.round((m.hours - (m.doneHours || 0)) * 60)));
+      const slot = SERVER.slots(W.date, extraBusy()).find((x) => x.free && Math.max(x.start, now) + mins <= x.end);
+      return slot ? { id: m.id, text: `${m.name} (${d.course} ${d.item}) for ${mins} min`, mins, time: fromMin(Math.ceil(Math.max(slot.start, now) / 5) * 5), due: m.date } : null;
+    }).filter(Boolean).slice(0, 2);
   }
   function step2() {
     const R = SERVER.rules(W.tasks, W.date, extraBusy());
@@ -555,9 +664,13 @@ window.PlanningModule = (SX) => {
       <div class="wiz-foot">${competent() ? "<span></span>" : `<a class="btn" href="#/plan/today/1">${icon("arrow-left")}Back</a>`}<button class="btn btn-primary" type="button" data-pl="check" ${W.evaluating || !W.tasks.length ? "disabled" : ""}>${W.evaluating ? "Checking…" : W.reviewsUsed ? "Check again" : "Check my plan"}</button></div>`;
   }
   function checkSuggestions() {
-    const list = st.fromCheck.filter((x) => x.date === W.date && !x.done);
-    if (!list.length) return "";
-    return `<section class="panel from-check" aria-labelledby="fc-h"><div class="panel-body stack-sm">
+    const list = st.fromCheck.filter((x) => x.date === W.date && !x.done), pt = planTargets();
+    const fromPlan = pt.length ? `<section class="panel from-check" aria-labelledby="fp-h"><div class="panel-body stack-sm">
+      <div class="label-up" id="fp-h">From your exam & assignment plans</div>
+      ${pt.map((x) => `<div class="fc-row"><div><b>${esc(x.text)}</b> <span class="mono small faint">· ${x.time}</span><div class="tiny faint">Stage due ${fmtDate(x.due)}</div></div>
+        <div class="row"><button class="btn btn-sm btn-primary" type="button" data-pl="fp-accept" data-v="${x.id}">Accept</button><button class="btn btn-sm btn-ghost" type="button" data-pl="fp-skip" data-v="${x.id}">Skip</button></div></div>`).join("")}</div></section>` : "";
+    if (!list.length) return fromPlan;
+    return `${fromPlan}<section class="panel from-check" aria-labelledby="fc-h"><div class="panel-body stack-sm">
       <div class="label-up" id="fc-h">Suggested from last night's check</div>
       ${list.map((x) => `<div class="fc-row">${x.editing ? `<div class="sg-edit"><label class="field"><span class="label">Task</span><input class="input" data-fc="${x.id}" data-f="text" value="${esc(x.text)}"></label><label class="field"><span class="label">Start</span><input class="input mono" type="time" data-fc="${x.id}" data-f="time" value="${x.time}"></label><label class="field"><span class="label">Minutes</span><input class="input mono" type="number" min="5" max="90" data-fc="${x.id}" data-f="mins" value="${x.mins}"></label></div>`
         : `<div><b>${esc(x.text)}</b> <span class="mono small faint">· ${x.mins} min · ${x.time}</span><div class="tiny faint">${esc(x.concept)}: ${esc(x.why)}</div></div>`}
@@ -622,12 +735,10 @@ window.PlanningModule = (SX) => {
     const ms = link && db.milestones.find((m) => m.id === link.verdict.milestoneId);
     return `${stepLabel(4, "Today's plan", tag("ok", `Plan saved · quality ${W.quality}/5`))}
       ${link && ms ? `<div class="link-confirm" role="status">${icon("link")}<span>Link "${esc(link.text.split(",")[0])}" to "${esc(ms.name)}"?</span><span class="row"><button class="btn btn-sm btn-primary" type="button" data-pl="link-yes" data-v="${link.id}">Yes</button><button class="btn btn-sm" type="button" data-pl="link-no">No</button></span></div>` : ""}
-      ${W.offDay ? `<div class="note" role="status">${icon("coffee")}<div>Marked as an off day. This plan won't count toward your progress. No reason needed. <button class="linkish" type="button" data-pl="offday-undo">Undo off day</button></div></div>` : ""}
       <section class="panel"><div class="panel-body checklist">${W.tasks.map((t) => checkRow(t, false)).join("")}</div>
         ${W.adding ? `<div class="add-form"><label class="field"><span class="label">Task</span><input class="input" data-pl-in="add-text" placeholder="e.g. Email tutor about CW2"></label><label class="field"><span class="label">When</span><input class="input mono" type="time" data-pl-in="add-time" value="19:00"></label><label class="field"><span class="label">Minutes</span><input class="input mono" type="number" min="5" max="90" data-pl-in="add-mins" value="20"></label><button class="btn btn-sm btn-primary" type="button" data-pl="add-save">Add</button></div>` : ""}
         <div class="panel-foot"><button class="btn btn-sm" type="button" data-pl="add-open">${icon("plus")}Add task (not scored)</button>
           <button class="btn btn-sm" type="button" data-pl="ics">${icon("calendar-plus")}Add to calendar (.ics)</button>
-          ${W.offDay ? "" : `<button class="btn btn-sm btn-ghost" type="button" data-pl="offday">${icon("coffee")}Off day</button>`}
           <span style="flex:1"></span><span class="tiny faint">After submitting you can tick, move or add.</span></div></section>
       <div class="wiz-foot"><a class="btn" href="#/">${icon("house")}Today</a>${afterSix() ? `<a class="btn btn-primary" href="#/reflection">${icon("moon-star")}Reflect on today</a>` : `<span class="tiny faint">Reflection is best in the evening (from 18:00).</span>`}</div>`;
   }
@@ -663,11 +774,11 @@ window.PlanningModule = (SX) => {
               <div class="hb-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
               <div class="hb-plot">${hist.map((h) => { const d = toDate(h.date).getUTCDate();
                 return h.completion == null
-                  ? `<div class="hb-col" title="${fmtDate(h.date)}: off day"><span class="hb-off">Off day</span><span class="hb-x">${d}</span></div>`
+                  ? `<div class="hb-col" title="${fmtDate(h.date)}: rest day"><span class="hb-off">Rest day</span><span class="hb-x">${d}</span></div>`
                   : `<div class="hb-col" title="${fmtDate(h.date)}: ${h.completion}% handled"><span class="hb-bar" style="--h:${h.completion}%"></span><span class="hb-x">${d}</span></div>`; }).join("")}</div>
             </div>
-            <p class="small muted" id="bars-sum">${done.length} planned days, ${hist.length - done.length} off day${hist.length - done.length === 1 ? "" : "s"}. On average ${avg}% of tasks were handled; the best day was ${Math.max(...done.map((h) => h.completion))}%.</p>
-            <details class="small"><summary>Show as a table</summary><table class="data"><thead><tr><th>Day</th><th>Completion</th></tr></thead><tbody>${hist.map((h) => `<tr><td>${fmtDate(h.date)}</td><td>${h.completion == null ? "Off day" : `${h.completion}%`}</td></tr>`).join("")}</tbody></table></details>
+            <p class="small muted" id="bars-sum">${done.length} planned days, ${hist.length - done.length} rest day${hist.length - done.length === 1 ? "" : "s"}. On average ${avg}% of tasks were handled; the best day was ${Math.max(...done.map((h) => h.completion))}%.</p>
+            <details class="small"><summary>Show as a table</summary><table class="data"><thead><tr><th>Day</th><th>Completion</th></tr></thead><tbody>${hist.map((h) => `<tr><td>${fmtDate(h.date)}</td><td>${h.completion == null ? "Rest day" : `${h.completion}%`}</td></tr>`).join("")}</tbody></table></details>
           </div></section>
         ${reflectionProgress()}
         <section class="panel" aria-labelledby="pg3"><div class="panel-head"><h2 id="pg3">Time estimates by task type</h2></div>
@@ -695,7 +806,7 @@ window.PlanningModule = (SX) => {
     const ios = /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone;
     return `<section class="panel" aria-labelledby="ps-h" style="margin-bottom:20px"><div class="panel-head"><h2 id="ps-h">Planning</h2><span class="sub">Signed in as <b class="mono">${esc(db.student.email)}</b></span></div>
       <div class="panel-body settings-plan">
-        <div><h3>Day window</h3>${windowControl("settings")}</div>
+        <div><h3>Day window and study time</h3><p class="small muted">These are in planning setup now.</p><a class="btn btn-sm" href="#/plan/setup">${icon("settings")}Open planning setup</a></div>
         <div><h3>Reminders</h3>
           <div class="stack-sm"><div><button class="btn btn-sm" type="button" data-pl="notify" ${st.notif === "granted" ? "disabled" : ""}>${icon("bell")}${st.notif === "granted" ? "Notifications on" : "Enable notifications"}</button></div>
             ${ios ? `<p class="tiny faint">On iPhone, add this site to your Home Screen first (Share → Add to Home Screen).</p>` : ""}
@@ -742,6 +853,22 @@ window.PlanningModule = (SX) => {
 
     W.tasks.forEach((t) => delete t.fresh);
 
+    // ELM answers the page shows once they arrive; the page works without them
+    if (id === "plan" && parts.path[0] === "milestones" && st.msEdit && !(st.msEdit.deadline in st.e2)) {
+      const dl = deadlineById(st.msEdit.deadline); st.e2[dl.id] = null; // E2: once per deadline (cached)
+      elm("e2", { course: dl.course, item: dl.item, kind: dl.kind, subtype: dl.subtype, due: dl.date }).then((r) => {
+        if (r && Array.isArray(r.questions) && r.questions.length) { st.e2[dl.id] = r.questions.slice(0, 3).map(String); if (location.hash.startsWith("#/plan/milestones")) SX.render(); }
+      });
+    }
+    if (id === "today" && competent() && st.e4 === undefined) {
+      st.e4 = null; // E4: one gap suggestion per day, competent path only
+      const g = F.gapForE4, free = SERVER.slots(W.date).filter((x) => x.free && x.end - x.start >= 30 && x.end > toMin(st.now));
+      if (g) elm("e4", { concept: g.concept, minutes_hint: 30, free_slots: free.map((x) => ({ start: fromMin(Math.max(x.start, toMin(st.now))), end: fromMin(x.end) })) }).then((r) => {
+        const s0 = r && toMin(r.start), ok = s0 != null && +r.minutes >= 5 && +r.minutes <= CFG.MAX_TASK_MIN && free.some((x) => s0 >= x.start && s0 + +r.minutes <= x.end);
+        if (ok && r.text) { st.e4 = { concept: g.concept, link: g.link, text: String(r.text), time: r.start, mins: +r.minutes }; if (location.hash === "#/" || location.hash === "") SX.render(); }
+      });
+    }
+
     // inputs: update state without re-rendering (keeps focus); refresh only dependent regions
     box.addEventListener("input", (e) => {
       const t = e.target, d = t.dataset;
@@ -759,10 +886,13 @@ window.PlanningModule = (SX) => {
       if (d.dl && st.preview && d.dl.startsWith("pv")) st.preview[+d.dl.slice(2)][d.f] = t.value;
       if (d.msIn !== undefined) {
         const row = st.msEdit.rows[+d.msIn]; row[d.f] = d.f === "hours" ? +t.value : t.value;
-        const reg = box.querySelector("[data-ms-rules]"); if (reg) { reg.innerHTML = msRules(deadlineById(st.msDeadline)); }
-        if (d.f === "name") { const c = box.querySelector(`[data-ms-tag="${d.msIn}"]`); const cls = SERVER.classify(t.value); if (c && !st.msTags[row.id]) c.innerHTML = cls === "pass" ? tag("ok", "Looks good") : tag("sug", "Suggestion"); }
-        SX.icons();
+        const reg = box.querySelector("[data-ms-rules]"); if (reg) { reg.innerHTML = msRules(deadlineById(st.msEdit.deadline)); SX.icons(); }
       }
+      if (d.msTopic !== undefined) st.msEdit.topics[+d.msTopic].name = t.value;
+      if (d.msPart !== undefined) st.msEdit.parts[+d.msPart].name = t.value;
+      if (d.msNum) st.msEdit[d.msNum] = +t.value;
+      if (d.plIn === "ms-paste") st.msEdit.paste = t.value;
+      if (d.plIn === "elm-token") { try { t.value.trim() ? sessionStorage.setItem(TOKEN_KEY, t.value.trim()) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* blocked storage: no ELM */ } st.e4 = undefined; }
       if (d.plBusy) { const b = db.setup.busy.find((x) => x.id === d.plBusy); if (d.f === "label") { busyLabels[b.id] = t.value; } else b[d.f] = t.value; }
       if (d.plIn === "win-start" || d.plIn === "win-end") {
         const s = val('[data-pl-in="win-start"]'), en = val('[data-pl-in="win-end"]'), bad = toMin(en) <= toMin(s);
@@ -776,11 +906,11 @@ window.PlanningModule = (SX) => {
       const t = e.target;
       if (t.dataset.plIn === "ics" && t.files[0]) {
         const text = await t.files[0].text().catch(() => "");
-        const evs = [...text.matchAll(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g)].map((m) => m[0]);
-        let n = 0;
-        evs.forEach((ev) => { const s = ev.match(/DTSTART[^:]*:(\d{8})T(\d{2})(\d{2})/), en = ev.match(/DTEND[^:]*:(\d{8})T(\d{2})(\d{2})/), sum = (ev.match(/SUMMARY:(.*)/) || [])[1];
-          if (s && en) { const date = `${s[1].slice(0, 4)}-${s[1].slice(4, 6)}-${s[1].slice(6)}`; const day = wd(date); if (day >= 1 && day <= 5) { db.setup.classes.push({ id: "c" + seq++, day, start: `${s[2]}:${s[3]}`, end: `${en[2]}:${en[3]}`, name: (sum || "Class").trim() }); n++; } } });
-        toast(n ? `Added ${n} class${n === 1 ? "" : "es"} from the file (demo). Save to keep them.` : "No weekday classes found in that file.");
+        const r = ICS.parseIcs(text);
+        if (!r.events.length) { toast("No busy times found in that file. Check it's an .ics calendar export."); t.value = ""; return; }
+        db.ics = { events: r.events, first: r.first, last: r.last }; db.setup.classes = []; db.setup.updated = "Today";
+        LS.set("socratix-ics", db.ics); // titles were never read; only dates, times and busy/tentative stay on this device
+        toast(`Imported ${r.events.length} busy slots, ${fmtDate(r.first)} – ${fmtDate(r.last)}.${r.unsupported ? ` ${r.unsupported} repeating event${r.unsupported === 1 ? "" : "s"} used only once.` : ""}`);
         rr();
       }
     });
@@ -805,7 +935,7 @@ window.PlanningModule = (SX) => {
       if (a === "sg-skip") { st.suggestion.skipped = true; toast("Skipped for today."); return rr(); }
       if (a === "sg-edit") { st.suggestion.editing = true; return rr(); }
       if (a === "sg-add") {
-        const s = F.e4, text = val('[data-pl-in="sg-text"]') || s.text, time = val('[data-pl-in="sg-time"]') || s.time, mins = +(val('[data-pl-in="sg-mins"]') || s.mins);
+        const s = st.e4, text = val('[data-pl-in="sg-text"]') || s.text, time = val('[data-pl-in="sg-time"]') || s.time, mins = +(val('[data-pl-in="sg-mins"]') || s.mins);
         const t = { ...blankTask(), id: "t-e4", text, time, mins, link: s.link, added: W.submitted, verdict: { finishable: "yes", scopeOk: true, issue: null, note: "Suggested from your practice.", type: "coding" }, changedSinceReview: false };
         W.tasks.push(t); st.suggestion.editing = false; saveDraft(); toast(W.submitted ? "Added to today's plan (not scored)." : "Added to your draft plan."); return rr();
       }
@@ -814,18 +944,20 @@ window.PlanningModule = (SX) => {
       if (a === "setup-tab") { st.setupTab = v; st.readMsg = null; return rr(); }
       if (a === "read") return busy(async () => {
         st.reading = true; rr();
-        try { const r = await api(() => SERVER.e1(st.pasteText || "", { date: W.date, elmDown: st.sim.elm }));
-          if (r.found) { st.preview = r.items.map((x) => ({ ...x, keep: true })); st.readMsg = null; }
+        try { const r = await e1(st.pasteText || "", "deadlines");
+          if (r.found) { st.preview = r.items.map((x) => ({ ...x, kind: x.kind || st.msTab, keep: true })); st.readMsg = null; }
           else { st.preview = null; st.setupTab = "fill"; st.readMsg = "Couldn't read that. Fill it in instead."; }
         } finally { st.reading = false; rr(); }
       });
       if (a === "pv-toggle") { st.preview[+v].keep = !st.preview[+v].keep; return rr(); }
       if (a === "save-all") return busy(async () => { const keep = st.preview.filter((p) => p.keep); await api(() => keep.forEach(upsertDeadline)); st.preview = null; st.pasteText = ""; toast("Saved"); rr(); });
-      if (a === "dl-add") { const d = readDl("new"); if (!d.course || !d.item || !d.date) { toast("Fill in course, item and date."); return; } return busy(async () => { await api(() => upsertDeadline(d)); toast("Saved"); rr(); }); }
+      if (a === "dl-add") { const d = { ...readDl("new"), kind: st.msTab, subtype: st.msTab === "assignment" ? val('[data-pl-in="new-subtype"]') || "code" : null }; if (!d.course || !d.item || !d.date) { toast("Fill in course, item and date."); return; } return busy(async () => { await api(() => upsertDeadline(d)); st.msAdd = false; const n = db.setup.deadlines.find((x) => x.course === d.course && x.item === d.item); if (n) { st.msDeadline = n.id; st.msEdit = null; } toast("Saved. Now add the " + (d.kind === "exam" ? "topics" : "parts") + "."); rr(); }); }
       if (a === "dl-edit") { st.editDeadline = v; return rr(); }
       if (a === "dl-cancel") { st.editDeadline = null; return rr(); }
       if (a === "dl-save") return busy(async () => { const d = readDl("ed"); await api(() => Object.assign(deadlineById(v), d)); st.editDeadline = null; toast("Saved"); rr(); });
-      if (a === "dl-del") return busy(async () => { await api(() => { db.setup.deadlines = db.setup.deadlines.filter((d) => d.id !== v); }); toast("Deleted"); rr(); });
+      if (a === "dl-del") return busy(async () => { await api(() => { db.setup.deadlines = db.setup.deadlines.filter((d) => d.id !== v); db.milestones = db.milestones.filter((m) => m.deadline !== v); }); st.msEdit = null; st.msDeadline = null; toast("Deleted"); rr(); });
+      if (a === "save-study") return busy(async () => { const w = +val('[data-pl-in="study-week"]'), dmax = +val('[data-pl-in="study-day"]'); if (!(w > 0 && dmax > 0)) { toast("Enter hours above 0."); return; } await api(() => { db.setup.weeklyHours = w; db.setup.dailyCapMin = Math.round(dmax * 60); db.setup.updated = "Today"; }); toast("Saved"); rr(); });
+      if (a === "ics-del") { db.ics = null; LS.del("socratix-ics"); toast("Calendar file removed from this device."); return rr(); }
       if (a === "save-win") return busy(async () => { const s = val('[data-pl-in="win-start"]'), en = val('[data-pl-in="win-end"]'); await api(() => { db.setup.window = { start: s, end: en }; db.setup.updated = "Today"; }); toast("Saved"); rr(); });
       if (a === "cls-open") { st.addClass = !st.addClass; return rr(); }
       if (a === "cls-add") { const n = val('[data-pl-in="cls-name"]').trim(); if (!n) { toast("Give the class a name."); return; } db.setup.classes.push({ id: "c" + seq++, day: +val('[data-pl-in="cls-day"]'), start: val('[data-pl-in="cls-start"]'), end: val('[data-pl-in="cls-end"]'), name: n }); st.addClass = false; return rr(); }
@@ -836,25 +968,102 @@ window.PlanningModule = (SX) => {
       if (a === "busy-del") { db.setup.busy = db.setup.busy.filter((x) => x.id !== v); delete busyLabels[v]; return rr(); }
       if (a === "save-busy") return busy(async () => { LS.set("socratix-busy-labels", busyLabels); await api(() => { /* server receives days + times only */ db.setup.updated = "Today"; }); toast("Saved"); });
 
-      // milestones
+      // exams & assignments (v6 §6–§8)
+      if (a === "ms-tab") { st.msTab = v; st.msDeadline = null; st.msEdit = null; st.msAdd = false; st.preview = null; return rr(); }
       if (a === "ms-dl") { st.msDeadline = v; st.msEdit = null; return rr(); }
-      if (a === "ms-add") { st.msEdit.rows.push({ id: "m" + seq++, deadline: st.msDeadline, name: "", date: "", hours: 2 }); rr(); const ins = box.ownerDocument.querySelectorAll('[data-f="name"][data-ms-in]'); ins[ins.length - 1]?.focus(); return; }
+      if (a === "ms-add") { st.msAdd = !st.msAdd; st.readMsg = null; return rr(); }
+      if (a === "ms-set") {
+        const [k, x] = v.split("|"), [kind, i] = k.split(":"), E = st.msEdit;
+        if (kind === "topic") E.topics[+i].confidence = x; else if (kind === "part") E.parts[+i].size = x; else if (kind === "subtype") E.subtype = x;
+        return rr();
+      }
+      if (a === "ms-topic-add") { st.msEdit.topics.push({ name: "", confidence: "ok" }); return rr(); }
+      if (a === "ms-topic-del") { st.msEdit.topics.splice(+v, 1); return rr(); }
+      if (a === "ms-part-add") { st.msEdit.parts.push({ name: "", size: "m" }); return rr(); }
+      if (a === "ms-part-del") { st.msEdit.parts.splice(+v, 1); return rr(); }
+      if (a === "ms-find") return busy(async () => {
+        const E = st.msEdit, exam = st.msTab === "exam";
+        if (!E.paste.trim()) { toast("Paste the text first."); return; }
+        st.finding = true; rr();
+        try {
+          const r = await e1(E.paste, exam ? "topics" : "parts");
+          const have = new Set((exam ? E.topics : E.parts).map((x) => x.name.trim().toLowerCase()));
+          const add = (r.found ? r.items : []).filter((x) => x.name && !have.has(x.name.trim().toLowerCase()));
+          if (exam) E.topics.push(...add.map((x) => ({ name: x.name, confidence: "ok" }))); else E.parts.push(...add.map((x) => ({ name: x.name, size: ["s", "m", "l"].includes(x.size) ? x.size : "m" })));
+          toast(add.length ? `Found ${add.length}. Check them, then set ${exam ? "your confidence" : "the sizes"}.` : "Couldn't read that. Add them yourself instead.");
+          if (add.length) E.paste = "";
+        } finally { st.finding = false; rr(); }
+      });
+      if (a === "ms-build") {
+        const E = st.msEdit, dl = deadlineById(E.deadline), exam = dl.kind === "exam";
+        const items = (exam ? E.topics : E.parts).filter((x) => x.name.trim());
+        if (!items.length) { toast(exam ? "Add at least one topic first." : "Add at least one part first."); return; }
+        const r = buildStages({ ...dl, topics: exam ? items : dl.topics, parts: exam ? dl.parts : items, subtype: E.subtype, papers: E.papers, paperMin: E.paperMin });
+        const old = E.rows.filter((m) => m.saved && m.doneHours);
+        E.rows = r.milestones.map((m) => { const o = old.find((x) => x.stage === m.stage && x.name === m.name); return o ? { ...m, doneHours: o.doneHours } : m; });
+        E.notes = r.notes; toast("Stages placed in your free time. Check them, then save."); return rr();
+      }
+      if (a === "ms-row-add") { st.msEdit.rows.push({ id: "m" + seq++, deadline: st.msEdit.deadline, stage: "custom", name: "", done: "", date: "", hours: 1, doneHours: 0, status: "open", redateCount: 0, saved: false }); rr(); const ins = box.ownerDocument.querySelectorAll('[data-f="name"][data-ms-in]'); ins[ins.length - 1]?.focus(); return; }
       if (a === "ms-del") { st.msEdit.rows.splice(+v, 1); return rr(); }
-      if (a === "ms-sort") { st.msEdit.rows.sort((x, y) => (x.date || "9").localeCompare(y.date || "9")); return rr(); }
-      if (a === "ms-own") { st.msTags[v] = true; return rr(); }
-      if (a === "ms-redate") { const el = document.querySelector(`[data-ms-in="${v}"][data-f="date"]`); el && (el.focus(), el.showPicker && (() => { try { el.showPicker(); } catch { /* not allowed */ } })()); return; }
-      if (a === "ms-save") return busy(async () => { const R = SERVER.milestoneRules(st.msEdit.rows, deadlineById(st.msDeadline)); await api(() => { db.milestones = [...db.milestones.filter((m) => m.deadline !== st.msDeadline), ...st.msEdit.rows.filter((m) => m.name.trim() && m.date)]; }); toast(R.cramming.length ? "Saved, with a cramming warning to look at." : "Saved"); rr(); });
+      if (a === "ms-done") {
+        const m = st.msEdit.rows[+v]; m.status = m.status === "done" ? "open" : "done"; m.doneAt = m.status === "done" ? F.today : null;
+        if (m.status === "done") toast(`Planned ${m.hours} h, took ${r1(m.doneHours || 0)} h.`); // v6 §8.3: planned vs actual on close
+        return rr();
+      }
+      if (a === "skip") { st.skip = { k: +v }; rr(); box.ownerDocument.querySelector('[data-pl-in="skip-reason"]')?.focus(); return; }
+      if (a === "skip-save") { const r = val('[data-pl-in="skip-reason"]').trim().split(/\s+/)[0]; if (!r) { toast("Add a one-word reason."); return; } Object.assign(st.msEdit.rows[+v], { status: "skipped", skipReason: r }); st.skip = null; return rr(); }
+      if (a === "redate") { st.redate = { k: +v, reason: null }; return rr(); }
+      if (a === "redate-reason") { st.redate.reason = v; return rr(); }
+      if (a === "redate-x") { st.redate = null; return rr(); }
+      if (a === "redate-save") { const m = st.msEdit.rows[+v], d = val('[data-pl-in="redate-date"]'); if (!d) return; Object.assign(m, { date: d, redateCount: (m.redateCount || 0) + 1, redateReason: st.redate.reason }); st.msEdit.rows.sort((x, y) => (x.date || "9").localeCompare(y.date || "9")); st.redate = null; toast(`Re-dated to ${fmtDate(d)}.`); return rr(); }
+      if (a === "ms-save") return busy(async () => {
+        const E = st.msEdit, dl = deadlineById(E.deadline);
+        const rows = E.rows.filter((m) => m.name.trim() && m.date).sort((x, y) => x.date.localeCompare(y.date)).map((m) => ({ ...m, saved: true })); // v6 C6: always in date order
+        const R = msWarnings({ [dl.id]: rows });
+        await api(() => { Object.assign(dl, { topics: E.topics.filter((x) => x.name.trim()), parts: E.parts.filter((x) => x.name.trim()), subtype: dl.kind === "assignment" ? E.subtype : null, papers: E.papers, paperMin: E.paperMin }); db.milestones = [...db.milestones.filter((m) => m.deadline !== dl.id), ...rows]; });
+        E.rows = rows.map((m) => ({ ...m }));
+        toast(R.cramming.length || R.atRisk.length ? "Saved, with a warning to look at." : "Saved"); rr();
+      });
 
       // wizard step 1
       if (a === "q1-read") return busy(async () => {
         W.reading = true; rr();
-        try { const r = await api(() => SERVER.e1(W.q1, { date: W.date, elmDown: st.sim.elm })); W.extracted = r; W.extractEdit = false; W.extractSaved = false; }
+        try { const r = await e1(W.q1, "deadlines"); W.extracted = r; W.extractEdit = false; W.extractSaved = false; }
         finally { W.reading = false; rr(); }
       });
       if (a === "q1-save") return busy(async () => { await api(() => upsertDeadline(W.extracted.items[0])); W.extractSaved = true; saveDraft(); rr(); });
       if (a === "q1-edit") { W.extractEdit = true; return rr(); }
       if (a === "q1-save-form") { const d = readDl("q1"); if (!d.course || !d.item || !d.date) { toast("Fill in course, item and date."); return; } return busy(async () => { await api(() => upsertDeadline(d)); W.extracted = { found: true, items: [d] }; W.extractEdit = false; W.extractSaved = true; saveDraft(); rr(); }); }
       if (a === "to2") { if (!W.priority.trim()) return; location.hash = "#/plan/today/2"; return; }
+
+      // rest day (session decision; replaces Off day). The UI never says whether the day counts.
+      if (a === "rest-no") { W.restAsked = true; saveDraft(); return rr(); }
+      if (a === "rest-yes") return busy(async () => {
+        W.restLoading = true; rr();
+        try {
+          const free = SERVER.slots(W.date).filter((x) => x.free).map((x) => ({ start: fromMin(x.start), end: fromMin(x.end) }));
+          const next = db.milestones.filter((m) => m.status === "open" && m.date >= W.date && m.hours > 0).sort((x, y) => x.date.localeCompare(y.date)).slice(0, 3).map((m) => ({ id: m.id, name: m.name, date: m.date }));
+          const r = await elm("e6", { date: W.date, now: st.now, free_slots: free, next_milestones: next });
+          const ok = r && Array.isArray(r.tasks) ? r.tasks.filter((t) => t.text && toMin(t.start) != null && +t.minutes > 0 && +t.minutes <= 30).slice(0, 2) : null;
+          W.restPlan = ok && ok.reduce((n, t) => n + +t.minutes, 0) <= 60 ? ok.map((t) => ({ text: t.text, time: t.start, mins: +t.minutes, milestoneId: t.milestone_id || null })) : restPlanRules();
+          W.dayKind = restWeekCount() >= CFG.REST_DAYS_PER_WEEK ? "rest_over_cap" : "rest"; // silent cap
+        } finally { W.restLoading = false; saveDraft(); rr(); }
+      });
+      if (a === "rest-use" || a === "rest-edit" || a === "rest-none") {
+        W.restAsked = true;
+        W.tasks = a === "rest-none" ? [] : W.restPlan.map((t) => ({ ...blankTask(), text: t.text, time: t.time, mins: t.mins, milestoneId: t.milestoneId }));
+        if (a === "rest-edit") { saveDraft(); location.hash = "#/plan/today/2"; return; }
+        W.tasks.forEach((t) => { t.verdict = SERVER.ruleVerdict(t); t.changedSinceReview = false; });
+        const R = SERVER.rules(W.tasks, W.date, extraBusy()); W.quality = W.tasks.length ? SERVER.quality(W, R) : 0;
+        W.submitted = true; W.evaluated = true; LS.del("socratix-plan-draft");
+        if (a === "rest-none") { location.hash = "#/"; return; }
+        location.hash = "#/plan/today/4"; return;
+      }
+      if (a === "rest-undo") { W.submitted = false; W.evaluated = false; W.restAsked = true; W.restPlan = null; W.dayKind = "normal"; W.tasks = [blankTask()]; W.quality = null; location.hash = competent() ? "#/plan/today/2" : "#/plan/today/1"; return; }
+
+      // wizard step 2: stages from the exam & assignment plans (v6 §8.4)
+      if (a === "fp-accept") { const x = planTargets().find((y) => y.id === v); if (x) { W.tasks = W.tasks.filter((t) => t.text.trim() || t.time); W.tasks.push({ ...blankTask(), text: x.text, time: x.time, mins: x.mins, milestoneId: x.id }); saveDraft(); toast("Added to your tasks."); } return rr(); }
+      if (a === "fp-skip") { st.fromPlanDone[W.date + v] = true; return rr(); }
 
       // wizard step 2: suggestions from the independence check (C4, both paths)
       if (a === "fc-edit") { st.fromCheck.find((x) => x.id === v).editing = true; return rr(); }
@@ -868,14 +1077,19 @@ window.PlanningModule = (SX) => {
       if (a === "ask") return busy(async () => {
         if (!W.ask.q.trim()) return;
         W.ask.loading = true; rr();
-        try { const r = await api(() => SERVER.e5(W.ask.q, { elmDown: st.sim.elm })); W.ask.answer = r.capped ? "You've used today's questions; try the template." : r.answer; }
+        try {
+          if (db.askLeft <= 0) { W.ask.answer = "You've used today's questions; try the template."; return; }
+          db.askLeft--;
+          const r = await elm("e5", { question: W.ask.q, top_priority: W.priority, free_minutes: SERVER.freeMinutes(W.date, extraBusy()), tasks: W.tasks.map((t) => ({ text: t.text, start: t.time, minutes: +t.mins })) });
+          W.ask.answer = r && r.answer ? r.answer : "I can't answer right now. Try the template: [finish] + [what, with a number or name].";
+        }
         finally { W.ask.loading = false; rr(); }
       });
       if (a === "check") return busy(async () => {
         W.tasks = W.tasks.filter((t) => t.text.trim() || t.time);
         if (!W.tasks.length) { toast("Add at least one task."); return; }
         W.evaluating = true; location.hash = "#/plan/today/3";
-        try { await api(() => evaluate()); }
+        try { await api(() => null); await evaluate(); }
         catch { location.hash = "#/plan/today/2"; throw new Error("net"); }
         finally { W.evaluating = false; }
         saveDraft(); rr();
@@ -894,7 +1108,7 @@ window.PlanningModule = (SX) => {
       if (a === "accept") { W.tasks.find((x) => x.id === v).accepted = true; return rr(); }
       if (a === "prio-own") { W.priorityOverride = true; return rr(); }
       if (a === "prio-add") { const t = blankTask(); t.text = W.priority; W.tasks.push(t); location.hash = "#/plan/today/2"; return; }
-      if (a === "full") return busy(async () => { await api(() => { W.fullFeedback = true; const r = SERVER.e3(W.tasks, ctx()); if (r) W.tasks.forEach((t) => { if (!t.overridden && !t.accepted) t.verdict = r.verdicts[t.id]; }); }); rr(); });
+      if (a === "full") return busy(async () => { W.fullFeedback = true; const r = await e3(W.tasks, true); if (r) W.tasks.forEach((t) => { if (!t.overridden && !t.accepted && r.verdicts[t.id]) t.verdict = r.verdicts[t.id]; }); rr(); });
       if (a === "submit") return busy(async () => {
         W.submitting = true; rr();
         try { await api(() => { const R = SERVER.rules(W.tasks, W.date, extraBusy()); W.quality = SERVER.quality(W, R); W.submitted = true; db.oneOffBusy[W.date] = W.busy.map((x) => ({ ...x })); }); }
@@ -903,16 +1117,14 @@ window.PlanningModule = (SX) => {
       });
 
       // wizard step 4 + Today checklist (optimistic, rollback on error)
-      if (a === "link-yes") { W.links[v] = W.tasks.find((t) => t.id === v).verdict.milestoneId; W.linkAsked = true; toast("Linked."); return rr(); }
+      if (a === "link-yes") { const t = W.tasks.find((x) => x.id === v); W.links[v] = t.verdict.milestoneId; if (t.status === "done") creditMilestone(t, 1); W.linkAsked = true; toast("Linked."); return rr(); }
       if (a === "link-no") { W.linkAsked = true; return rr(); }
-      if (a === "tick") { const t = W.tasks.find((x) => x.id === v); const prev = t.status; return optimistic(() => { t.status = prev === "done" ? "planned" : "done"; }, () => { t.status = prev; }); }
+      if (a === "tick") { const t = W.tasks.find((x) => x.id === v); const prev = t.status; return optimistic(() => { t.status = prev === "done" ? "planned" : "done"; creditMilestone(t, t.status === "done" ? 1 : -1); }, () => { creditMilestone(t, t.status === "done" ? -1 : 1); t.status = prev; }); }
       if (a === "move") { W.moving = v; return rr(); }
       if (a === "move-save") { const t = W.tasks.find((x) => x.id === v), to = val('[data-pl-in="move-time"]'); const prev = [t.status, t.movedTo]; W.moving = null; return optimistic(() => { t.status = "moved"; t.movedTo = to; toast(`Moved to ${to}`); }, () => { [t.status, t.movedTo] = prev; }); }
       if (a === "add-open") { W.adding = !W.adding; return rr(); }
       if (a === "add-save") { const text = val('[data-pl-in="add-text"]').trim(); if (!text) { toast("Write the task first."); return; } const t = { ...blankTask(), text, time: val('[data-pl-in="add-time"]'), mins: +val('[data-pl-in="add-mins"]'), added: true }; W.adding = false; return optimistic(() => W.tasks.push(t), () => { W.tasks = W.tasks.filter((x) => x !== t); }); }
       if (a === "ics") return downloadIcs();
-      if (a === "offday") { return optimistic(() => { W.offDay = true; }, () => { W.offDay = false; }); }
-      if (a === "offday-undo") { return optimistic(() => { W.offDay = false; }, () => { W.offDay = true; }); }
 
 
       // settings
@@ -925,29 +1137,31 @@ window.PlanningModule = (SX) => {
       if (a === "del-go") { const dlg = box.querySelector("[data-del-dialog]"); dlg && dlg.close(); LS.del("socratix-plan-draft"); LS.del("socratix-busy-labels"); toast("All your plans, ticks and ratings were deleted."); location.hash = "#/login"; return; }
     });
 
-    function ctx() { return { date: W.date, priority: W.priority, allTasks: W.tasks, elmDown: st.sim.elm }; }
-    function evaluate() {
+    async function evaluate() {
       const rulesOnly = W.reviewsUsed >= CFG.MAX_REVIEWS_PER_PLAN;
       const send = W.evaluated ? W.tasks.filter((t) => t.changedSinceReview) : W.tasks;   // Check again sends only changed tasks
-      const r = rulesOnly ? null : SERVER.e3(send, ctx());
+      const r = rulesOnly || !send.length ? null : await e3(send, !competent());
       send.forEach((t) => {
-        t.verdict = r ? r.verdicts[t.id] : rulesOnly ? SERVER.ruleVerdict(t) : { finishable: "unsure", scopeOk: true, issue: "unchecked", note: "", type: SERVER.typeOf(t.text) };
+        t.verdict = r && r.verdicts[t.id] ? r.verdicts[t.id] : rulesOnly ? SERVER.ruleVerdict(t) : { finishable: "unsure", scopeOk: true, issue: "unchecked", note: "", type: SERVER.typeOf(t.text) };
         t.changedSinceReview = false; t.accepted = false;
       });
       if (r) { W.priorityCovered = r.priorityCovered; W.coveredBy = r.coveredBy; }   // ELM down: coverage stays unknown, no cap
-      const weakest = W.tasks.find((t) => t.verdict && t.verdict.issue === "not_finishable" && t.verdict.source === "elm");
-      W.rewrite = weakest && r ? { taskId: weakest.id, text: SERVER.rewriteOf(weakest) } : W.rewrite && W.tasks.some((t) => t.id === W.rewrite.taskId) ? W.rewrite : null;
+      // the worked example is ELM's rewrite of the weakest task (Path 1 only); without ELM there is none
+      W.rewrite = r && r.rewrite && !competent() && W.tasks.some((t) => t.id === r.rewrite.taskId) ? r.rewrite : W.rewrite && W.tasks.some((t) => t.id === W.rewrite.taskId) ? W.rewrite : null;
       if (!rulesOnly) W.reviewsUsed++;
       W.rulesOnly = W.reviewsUsed >= CFG.MAX_REVIEWS_PER_PLAN && W.evaluated;
       W.evaluated = true;
     }
-    // a Step 3 action changed one task: re-check just that task right away (rules + the same mock reviewer)
+    // a Step 3 action changed one task: re-check it with the rules right away (an ELM re-check would use up one of the 2 reviews)
     function reviewLocal(t) {
-      const r = !st.sim.elm && !W.rulesOnly ? SERVER.e3([t], ctx()) : null;
-      t.verdict = r ? r.verdicts[t.id] : SERVER.ruleVerdict(t); t.changedSinceReview = false;
-      if (r) { const c = SERVER.e3(W.tasks, ctx()); W.priorityCovered = c.priorityCovered; W.coveredBy = c.coveredBy; }
+      t.verdict = { ...SERVER.ruleVerdict(t), milestoneId: t.verdict && t.verdict.milestoneId }; t.changedSinceReview = false;
       if (W.rewrite && W.rewrite.taskId === t.id) W.rewrite = null;
       saveDraft();
+    }
+    // v6 §8.3: hours done = minutes of done tasks linked to the milestone
+    function creditMilestone(t, sign) {
+      const m = db.milestones.find((x) => x.id === (t.milestoneId || W.links[t.id]));
+      if (m) m.doneHours = Math.max(0, Math.round(((m.doneHours || 0) + (sign * (+t.mins || 0)) / 60) * 100) / 100);
     }
     async function optimistic(apply, rollback) {
       apply(); rr();
@@ -956,7 +1170,7 @@ window.PlanningModule = (SX) => {
     function readDl(key) { const g = (f) => (box.querySelector(`[data-dl="${key}"][data-f="${f}"]`) || {}).value || ""; return { course: g("course").trim().toUpperCase(), item: g("item").trim(), date: g("date"), time: g("time") || "23:59" }; }
     function upsertDeadline(d) {
       const ex = db.setup.deadlines.find((x) => x.course.toLowerCase() === d.course.toLowerCase() && x.item.toLowerCase() === d.item.toLowerCase());
-      if (ex) Object.assign(ex, { date: d.date, time: d.time }); else db.setup.deadlines.push({ id: "d" + seq++, course: d.course, item: d.item, date: d.date, time: d.time });
+      if (ex) Object.assign(ex, { date: d.date, time: d.time }); else db.setup.deadlines.push({ id: "d" + seq++, course: d.course, item: d.item, kind: d.kind === "exam" ? "exam" : "assignment", subtype: d.kind === "exam" ? null : d.subtype || "code", date: d.date, time: d.time, topics: [], parts: [] });
     }
     function downloadIcs() {
       const stamp = (date, t) => `${date.replace(/-/g, "")}T${t.replace(":", "")}00`;
@@ -964,12 +1178,13 @@ window.PlanningModule = (SX) => {
       const blob = new Blob([`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Socratix//Plan//EN\r\n${ev}\r\nEND:VCALENDAR\r\n`], { type: "text/calendar" });
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `plan-${W.date}.ics`; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast("Calendar file downloaded.");
+      if (SX.offerOutlookGuide) SX.offerOutlookGuide(); // first download only
     }
   }
 
   function nextDay(fromPlanTomorrow) {
     const date = addDays(W.date, 1);
-    if (W.submitted && !W.closed && !fromPlanTomorrow) { db.history.push({ date: W.date, completion: W.offDay ? null : Math.round((W.tasks.filter((t) => !t.added && t.status !== "planned").length / Math.max(1, W.tasks.filter((t) => !t.added).length)) * 100) }); db.history = db.history.slice(-14); }
+    if (W.submitted && !W.closed && !fromPlanTomorrow) { db.history.push({ date: W.date, kind: W.dayKind, completion: W.dayKind === "rest" ? null : Math.round((W.tasks.filter((t) => !t.added && t.status !== "planned").length / Math.max(1, W.tasks.filter((t) => !t.added).length)) * 100) }); db.history = db.history.slice(-14); }
     W = newWizard(date, false); st.suggestion = { skipped: false, editing: false }; st.now = "09:30";
     F.today = date; LS.del("socratix-plan-draft");
   }
@@ -979,12 +1194,6 @@ window.PlanningModule = (SX) => {
   const planTask = (id) => { const t = W.tasks.find((x) => x.id === id); return t ? { id: t.id, title: t.text } : null; };
 
   // ---------- API used by Project and Reflection ----------
-  function addProjectDeadline(deadline, milestones) {
-    const id = "d" + seq++;
-    db.setup.deadlines.push({ id, ...deadline });
-    milestones.forEach((m) => db.milestones.push({ id: "m" + seq++, deadline: id, name: m.name, date: m.date, hours: m.est_hours }));
-    return id;
-  }
   function addTask(task) {
     const t = { ...blankTask(), ...task, changedSinceReview: true, added: W.submitted };
     W.tasks.push(t); saveDraft(); return t;
@@ -1001,7 +1210,7 @@ window.PlanningModule = (SX) => {
 
   return {
     meta, render, bind, today: todayPage, progress: progressPage, settingsSection, planTask,
-    plan: () => W, competent, pathLine, onTargetCount, addProjectDeadline, addTask, closePlan, addTomorrowSuggestion, freeHoursOn,
+    plan: () => W, competent, pathLine, onTargetCount, addTask, closePlan, addTomorrowSuggestion, freeHoursOn,
     milestoneRules: (rows, deadline) => SERVER.milestoneRules(rows, deadline), conceptsOf: SERVER.conceptsOf, typeName: (t) => SERVER.TYPE_NAME[t] || "Other", typeOf: SERVER.typeOf,
     dateLabel: fmtDate, today_: () => F.today, nowTime: () => st.now, elmDown: () => st.sim.elm, proto,
     _server: SERVER, _db: db,
